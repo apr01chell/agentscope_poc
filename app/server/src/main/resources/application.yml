@@ -1,0 +1,23 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  version: 0.1.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  health:
+    # 中间件尚未接入（MySQL/Redis/RustFS 在后续工单里接），此处先不探测外部依赖，
+    # 否则本地只起后端时会误报 DOWN。
+    defaults:
+      enabled: false
+
+logging:
+  level:
+    io.agentscope.platform: DEBUG

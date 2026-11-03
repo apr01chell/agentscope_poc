@@ -1,0 +1,21 @@
+server:
+  port: ${AUTH_PORT:8081}
+
+app:
+  version: 0.1.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  health:
+    defaults:
+      enabled: false
+
+logging:
+  level:
+    io.agentscope.platform: DEBUG
