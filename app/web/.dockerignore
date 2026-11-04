@@ -1,0 +1,7 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+# .env 是入库的公共默认值，必须进构建上下文；只有个人覆盖文件要排除。
+.env.local
+.env.*.local

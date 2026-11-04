@@ -1,0 +1,30 @@
+# 依赖与构建产物
+.m2/
+**/target/
+node_modules/
+dist/
+
+# 环境变量
+# app/web/.env 是入库的公共默认值（VITE_* 本来就会打进产物），只忽略个人覆盖与带凭证的 compose 环境。
+deploy/.env
+.env.local
+.env.*.local
+
+# 工具产物
+test-results/
+playwright-report/
+*.log
+
+# 编辑器与系统
+.DS_Store
+.idea/
+*.iml
+
+# Docker 构建状态（本机沙箱需要把 DOCKER_CONFIG 指到工作区）
+.docker/
+
+# pnpm 本地存储
+.pnpm-store/
+
+# gh / 工具缓存（本机沙箱把 XDG_CACHE_HOME 指到工作区时会产生）
+.cache/

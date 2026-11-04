@@ -1,0 +1,17 @@
+/*
+ * Element Plus 主题适配。
+ *
+ * 把 Element 主色映射到自己的设计变量，避免「按钮是 Element 蓝、链接是模板紫」的混搭。
+ * 只覆盖 CSS 变量，不覆盖组件内部结构，升级 Element Plus 时不会失效。
+ */
+:root {
+  --el-color-primary: var(--app-primary);
+  --el-color-primary-light-3: color-mix(in oklch, var(--app-primary) 70%, white);
+  --el-color-primary-light-5: color-mix(in oklch, var(--app-primary) 50%, white);
+  --el-color-primary-light-7: color-mix(in oklch, var(--app-primary) 30%, white);
+  --el-color-primary-light-8: color-mix(in oklch, var(--app-primary) 20%, white);
+  --el-color-primary-light-9: color-mix(in oklch, var(--app-primary) 10%, white);
+  --el-color-primary-dark-2: var(--app-primary-strong);
+  --el-border-radius-base: 0.5rem;
+  --el-font-family: inherit;
+}

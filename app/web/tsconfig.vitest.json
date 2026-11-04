@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo",
+    /* 测试跑在 Node（jsdom 模拟浏览器）里，需要 Node 与 Vitest 的类型。
+       `types` 是**覆盖**而不是合并继承来的值，所以 `vite/client` 必须在这里重复一次——
+       否则测试引用到的源码（import.meta.env、*.vue 模块声明）会集体报「属性不存在」。 */
+    "types": ["node", "vitest/globals", "vite/client"],
+    "noEmit": true
+  },
+  "include": ["tests/**/*.ts"]
+}

@@ -1,0 +1,32 @@
+/*
+ * 设计变量（presetWind4 / Tailwind v4 语义）。
+ *
+ * 为什么用 `--app-*` 前缀：presetWind4 自己维护 `--colors-*`（复数）命名空间来产出工具类，
+ * 设计 token 用独立前缀可以一眼区分「我们的变量」与「框架生成的变量」，也避免将来框架改命名
+ * 时撞名。`uno.config.ts` 负责把 `theme.colors` 映射到这些变量上。
+ *
+ * 颜色只在这里定义，业务代码不要写死色值；暗色主题通过 `.dark` 覆盖同名变量实现，
+ * 组件不需要写两套类名。
+ */
+:root {
+  --app-primary: oklch(58% 0.18 275);
+  --app-primary-strong: oklch(52% 0.19 275);
+  --app-page: oklch(98% 0.005 265);
+  --app-surface: oklch(100% 0 0);
+  --app-border: oklch(92% 0.01 265);
+  --app-text: oklch(28% 0.03 265);
+  --app-muted: oklch(56% 0.02 265);
+  --app-on-primary: oklch(100% 0 0);
+}
+
+/* `.dark` 由 VueUse 的 useDark 挂在 <html> 上。 */
+.dark {
+  --app-primary: oklch(72% 0.15 275);
+  --app-primary-strong: oklch(78% 0.14 275);
+  --app-page: oklch(21% 0.015 265);
+  --app-surface: oklch(26% 0.018 265);
+  --app-border: oklch(33% 0.02 265);
+  --app-text: oklch(94% 0.01 265);
+  --app-muted: oklch(72% 0.015 265);
+  --app-on-primary: oklch(18% 0.02 265);
+}

@@ -1,0 +1,52 @@
+/* 全局样式入口：只放跨页面共享的内容；组件级样式一律用 UnoCSS 原子类。 */
+
+@import './theme.css';
+@import './element.css';
+
+/*
+ * 最小基线重置。
+ *
+ * presetWind4 的 reset 已关闭（见 uno.config.ts），不是因为不需要，而是因为要和 Element Plus
+ * 共存：完整 reset 会把 Element 的按钮、表单基线一起改掉。这里只手写模板真正依赖的几条。
+ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--app-text);
+  background: var(--app-page);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: var(--app-primary);
+}
+
+code {
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  background: color-mix(in oklch, var(--app-text) 8%, transparent);
+  font-size: 0.9em;
+}
+
+/* 键盘用户必须看得见焦点。 */
+:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
