@@ -25,3 +25,6 @@ playwright-report/
 
 # pnpm 本地存储
 .pnpm-store/
+
+# gh / 工具缓存（本机沙箱把 XDG_CACHE_HOME 指到工作区时会产生）
+.cache/
