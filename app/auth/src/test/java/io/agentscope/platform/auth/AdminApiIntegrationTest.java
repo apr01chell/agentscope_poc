@@ -69,6 +69,18 @@ class AdminApiIntegrationTest {
     }
 
     @Test
+    void meReturnsBusinessPermissionsOnly() throws Exception {
+        Map<String, Object> me = TestBrowser.parse(admin.get("/auth/me").body());
+        Map<?, ?> data = (Map<?, ?>) me.get("data");
+        List<?> permissions = (List<?>) data.get("permissions");
+
+        assertEquals(14, permissions.size(), "应只返回 14 个业务权限点");
+        assertTrue(permissions.contains("client:rotate-secret"));
+        assertFalse(permissions.contains("FACTOR_PASSWORD"),
+                "不能把 Spring Security 的内部 authority 当成业务权限返回");
+    }
+
+    @Test
     void creatingUserWithRolesMakesItVisible() throws Exception {
         Map<String, Object> created = send("POST", "/users", Map.of(
                 "username", "alice", "password", "alice123",

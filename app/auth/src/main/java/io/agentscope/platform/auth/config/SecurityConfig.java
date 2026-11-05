@@ -56,6 +56,8 @@ public class SecurityConfig {
         http.authorizeHttpRequests(authorize -> authorize
                         // 健康检查必须匿名可达：compose 用它探活，浏览器也用它判断后端是否在线
                         .requestMatchers("/api/health", "/actuator/health", "/error", "/favicon.ico").permitAll()
+                        // 登录前就要拿 CSRF 令牌，否则表单提交会被 403 拦掉
+                        .requestMatchers("/auth/csrf").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginPage("/login")
