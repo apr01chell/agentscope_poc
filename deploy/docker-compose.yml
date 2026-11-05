@@ -99,6 +99,12 @@ services:
         condition: service_healthy
     environment:
       AUTH_PORT: "8081"
+      # 容器内走服务名与内部端口；宿主端口 13306 只给本机工具用。
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-agent_platform}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppass}
     ports:
       - "${AUTH_PORT:-8081}:8081"
     healthcheck:

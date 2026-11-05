@@ -3,6 +3,30 @@ server:
 
 app:
   version: 0.1.0
+  security:
+    jwk:
+      # 开发用仓库内的密钥；生产必须设 AUTH_JWK_PATH 指向挂载的 Secret，
+      # 且 prod profile 下用 classpath: 会直接启动失败（见 JwtConfig）。
+      path: ${AUTH_JWK_PATH:classpath:keys/dev-rsa.pem}
+    bootstrap-admin:
+      username: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:admin}
+      password: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:admin123}
+      display-name: ${AUTH_BOOTSTRAP_ADMIN_DISPLAY_NAME:管理员}
+    workbench-client:
+      client-id: ${AUTH_WORKBENCH_CLIENT_ID:workbench}
+      client-secret: ${AUTH_WORKBENCH_CLIENT_SECRET:workbench-secret}
+      redirect-uri: ${AUTH_WORKBENCH_REDIRECT_URI:http://localhost:8080/login/oauth2/code/workbench}
+
+spring:
+  datasource:
+    # SAS 的 MySQL schema 要求这三个连接参数，否则 token 的签发/过期时间会按会话时区错位。
+    url: "jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:13306}/${MYSQL_DATABASE:agent_platform}?preserveInstants=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&useSSL=false&allowPublicKeyRetrieval=true"
+    username: ${MYSQL_USER:app}
+    password: ${MYSQL_PASSWORD:apppass}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
 
 management:
   endpoints:
@@ -12,10 +36,9 @@ management:
   endpoint:
     health:
       show-details: always
-  health:
-    defaults:
-      enabled: false
 
 logging:
   level:
     io.agentscope.platform: DEBUG
+    # 不要放开 org.springframework.security 的 TRACE：会把 token 打进日志
+    org.springframework.security: INFO

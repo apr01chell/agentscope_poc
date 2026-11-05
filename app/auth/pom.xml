@@ -13,7 +13,7 @@
 
   <artifactId>auth</artifactId>
   <name>auth</name>
-  <description>用户中心：OAuth2.1 授权码 + PKCE、JWT 签发、JWKS 与 userinfo</description>
+  <description>用户中心：RBAC、OAuth2.1 授权码 + PKCE、JWT 签发、JWKS 与 userinfo</description>
 
   <dependencies>
     <dependency>
@@ -31,7 +31,69 @@
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <!--
+      直接用 SAS 库，不用 spring-boot-starter-oauth2-authorization-server：
+      本模块显式定义 JWKSource / RegisteredClientRepository / AuthorizationServerSettings，
+      starter 的属性和自动配置用不上，留着只多一层要排除的东西。
+      版本由 Spring Security BOM（Boot 4.1.2 导入）管理。
+    -->
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-oauth2-authorization-server</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <!--
+      Spring Framework 7 的 spring-core 不再内嵌 commons-logging API，
+      且加入 SAS / Flyway 后依赖仲裁会把传递进来的那份挤掉，导致 spring-test 启动即
+      NoClassDefFoundError: org/apache/commons/logging/LogFactory。显式声明一份。
+    -->
+    <dependency>
+      <groupId>commons-logging</groupId>
+      <artifactId>commons-logging</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <!--
+      Boot 4 把 Flyway 自动配置拆到了 spring-boot-flyway 模块，
+      只声明 flyway-core 不会触发迁移；必须用 starter 把自动配置带进来。
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-flyway</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-mysql</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-mysql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

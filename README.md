@@ -4,6 +4,7 @@
 
 - 规格说明：[#1](https://github.com/apr01chell/agentscope_poc/issues/1)（`docs/specs/v1-spec.md`）
 - 架构设计：[docs/design/v1-architecture.md](docs/design/v1-architecture.md)
+- 用户中心方案：[docs/design/14-auth-oidc.md](docs/design/14-auth-oidc.md)
 - 工单：[#2–#25](https://github.com/apr01chell/agentscope_poc/issues)
 
 ## 结构
@@ -61,7 +62,7 @@ pnpm dev          # http://localhost:5173，/api 代理到 localhost:8080
 |---|---|---|
 | web | 8088（容器）/ 5173（dev） | 前端 |
 | server | 8080 | 工作台后端 |
-| auth | 8081 | 用户中心 |
+| auth | 8081 | 用户中心（RBAC + OIDC） |
 | MySQL | **13306** → 3306 | 避开本机已有 MySQL |
 | Redis | **16379** → 6379 | 避开本机已有 Redis |
 | RustFS | 9000 / 9001 | S3 API / 控制台，凭证默认 `rustfsadmin` |
@@ -82,6 +83,30 @@ cd deploy && docker compose ps
 ```
 
 CI 跑同样的三件事，见 `.github/workflows/ci.yml`。
+
+## 用户中心（OIDC）
+
+`auth` 是独立部署的授权服务器。启动后 Flyway 自动建表并幂等创建：
+
+- 管理员账号：`admin` / `admin123`（可用 `AUTH_BOOTSTRAP_ADMIN_PASSWORD` 覆盖）
+- 工作台客户端：`workbench` / `workbench-secret`（可用 `AUTH_WORKBENCH_CLIENT_SECRET` 覆盖）
+- 14 个权限点，`ADMIN` 全部拥有；`USER` 不进入控制台
+
+关键端点：
+
+```bash
+curl http://localhost:8081/.well-known/openid-configuration
+curl http://localhost:8081/oauth2/jwks
+curl -u workbench:workbench-secret -X POST http://localhost:8081/oauth2/token ...
+```
+
+签名密钥在 `app/auth/src/main/resources/keys/dev-rsa.pem`，**仅开发用**。生产必须设 `AUTH_JWK_PATH` 指向挂载的 Secret；`prod` profile 下仍用 classpath 密钥会直接启动失败。
+
+集成测试跑在 Testcontainers MySQL 8.4 上，覆盖：PKCE 全流程与不匹配、授权码重放、JWKS 独立验签、userinfo claims、refresh 轮换、过期 token、未登记客户端、动态注册端点不存在。
+
+```bash
+cd app && mvn -pl auth test
+```
 
 ## 约定
 
