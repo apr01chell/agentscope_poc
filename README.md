@@ -117,6 +117,27 @@ pnpm dev          # http://localhost:5174
 
 控制台与 auth 同源，所以写请求必须带 CSRF 令牌：登录前先取 `/auth/csrf`（该端点匿名可访问），之后放在 `X-CSRF-TOKEN` 头里。
 
+## 模型配置
+
+工作台的 agent 走 AgentScope Java（`2.1.0-BETA1`），模型用 OpenAI 兼容协议接 DeepSeek：
+
+```bash
+cd deploy
+cp .env.example .env
+# 编辑 .env，填入你的密钥
+DEEPSEEK_API_KEY=sk-...
+```
+
+| 环境变量 | 默认 | 说明 |
+|---|---|---|
+| `MODEL_PROVIDER` | `deepseek` | `stub` 时用离线桩，不发任何网络请求（测试用） |
+| `DEEPSEEK_API_KEY` | 空 | 为空时前端会看到"未配置模型密钥"的可读提示，不会白屏 |
+| `MODEL_NAME` | `deepseek-chat` | 换成 `deepseek-reasoner` 或其他 OpenAI 兼容模型只需改这里 |
+| `MODEL_BASE_URL` | `https://api.deepseek.com` | 私有化 vLLM 改这一行即可 |
+| `MODEL_TIMEOUT_SECONDS` | `120` | 单轮超时 |
+
+**框架类型只出现在 `agent/` 包内**：上层只依赖 `AgentRuntime` 接口，升级 AgentScope 时改动面被限制在这个包里。
+
 ## 用户中心（OIDC）
 
 `auth` 是独立部署的授权服务器。启动后 Flyway 自动建表并幂等创建：

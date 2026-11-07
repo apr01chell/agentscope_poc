@@ -45,7 +45,7 @@ import tools.jackson.databind.ObjectMapper;
  * 身份用 spring-security-test 注入，不伪造整个 OAuth 登录流程。
  */
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(properties = "app.model.provider=stub")
 class ConversationApiTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();

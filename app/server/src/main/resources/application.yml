@@ -9,6 +9,14 @@ server:
 
 app:
   version: 0.1.0
+  model:
+    # stub：离线桩（测试/无 key 本地调试）；deepseek：走 OpenAI 兼容协议
+    provider: ${MODEL_PROVIDER:deepseek}
+    # 凭证只从环境变量来，绝不写进代码或仓库
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: ${MODEL_BASE_URL:https://api.deepseek.com}
+    name: ${MODEL_NAME:deepseek-chat}
+    timeout-seconds: ${MODEL_TIMEOUT_SECONDS:120}
   auth:
     # 浏览器可达的地址（授权端点要用它，否则浏览器被重定向到容器内网名）
     public-issuer: ${AUTH_PUBLIC_ISSUER:http://localhost:18081}
