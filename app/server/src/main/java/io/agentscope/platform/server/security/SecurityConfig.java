@@ -14,6 +14,15 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 @EnableWebSecurity
 public class SecurityConfig {
 
+    /**
+     * 登录成功后跳回的站点根地址。
+     *
+     * <p>开发时前端在 vite（5173）、后端在 8080，是跨 origin 的；生产由 nginx 同源，
+     * 这个值留空即可。做成配置而不是硬编码，是因为它随部署形态变化。
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.web-origin:http://localhost:5173}")
+    private String webOrigin;
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -22,7 +31,7 @@ public class SecurityConfig {
                         // 业务接口要登录；其余（SPA 静态资源、登录流程）放行
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
-                .oauth2Login(login -> login.defaultSuccessUrl("/", true))
+                .oauth2Login(login -> login.defaultSuccessUrl(webOrigin + "/", true))
                 .logout(logout -> logout.logoutSuccessUrl("/"))
                 // 前端是 SPA，走 session + cookie：CSRF 令牌放 cookie 里，
                 // axios 默认会读 XSRF-TOKEN 并回填 X-XSRF-TOKEN 头。

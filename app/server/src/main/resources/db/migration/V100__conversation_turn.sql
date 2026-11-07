@@ -1,3 +1,7 @@
+-- 版本号区间约定：auth 用 V1–V99，server 用 V100–V199。
+-- 两个模块共用一个 MySQL 与同一张 flyway_schema_history，
+-- 若都从 V1 开始编号，Flyway 会因为 checksum 不一致而拒绝启动。
+
 -- 会话与轮次。事件流在 Redis Stream，落库归档留给 #5。
 -- 全库无外键：关联完整性由应用层维护（与 auth 模块一致）。
 

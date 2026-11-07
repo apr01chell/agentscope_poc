@@ -6,14 +6,6 @@ import { createApiError, http, isApiError, toApiError, unwrap } from '@/api/http
 import { installAuthInterceptors } from '@/api/interceptors'
 import { useAuthStore } from '@/stores/auth'
 
-const user = {
-  id: 1,
-  username: 'admin',
-  displayName: '管理员',
-  avatarUrl: null,
-  permissions: ['USER_READ'],
-}
-
 describe('toApiError', () => {
   it('保留后端信封里的 message、状态码与业务码', () => {
     const result = toApiError({
@@ -115,20 +107,6 @@ describe('鉴权拦截器', () => {
     http.interceptors.response.clear()
   })
 
-  /**
-   * 取出请求拦截器。
-   *
-   * 这里断言成 `unknown` 再转成测试用的宽松签名：axios 的 handler 参数是
-   * `InternalAxiosRequestConfig`，而测试只关心 `headers`。直接双重断言是为了说明
-   * 「这是测试里的类型妥协」，而不是把类型系统糊过去。
-   */
-  function requestFulfilled() {
-    const handler = http.interceptors.request.handlers?.[0]?.fulfilled
-    if (!handler)
-      throw new Error('请求拦截器未安装')
-    return handler as unknown as (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
-  }
-
   function responseRejected() {
     const handler = http.interceptors.response.handlers?.[0]?.rejected
     if (!handler)
@@ -136,33 +114,18 @@ describe('鉴权拦截器', () => {
     return handler as (error: unknown) => Promise<never>
   }
 
-  it('登录后把 token 注入 Authorization', () => {
-    useAuthStore().setSession('token-123', user)
-
-    const config = requestFulfilled()({ headers: {} })
-
-    expect(config.headers.Authorization).toBe('Bearer token-123')
-  })
-
-  it('未登录时不注入空的 Authorization', () => {
-    const config = requestFulfilled()({ headers: {} })
-
-    expect(config.headers.Authorization).toBeUndefined()
-  })
-
   it('受保护接口 401 时清空会话并带着 redirect 跳登录页', async () => {
-    useAuthStore().setSession('expired', user)
-    const error = { isAxiosError: true, response: { status: 401 }, config: { url: '/api/v1/auth/me' } }
+    const error = { isAxiosError: true, response: { status: 401 }, config: { url: '/api/conversations' } }
 
     await expect(responseRejected()(error)).rejects.toMatchObject({ status: 401 })
-    expect(useAuthStore().token).toBeNull()
+    expect(useAuthStore().isAuthenticated).toBe(false)
     expect(router.replace).toHaveBeenCalledWith({ path: '/login', query: { redirect: '/home?tab=1' } })
   })
 
-  it('登录接口自身的 401 不跳转（那是密码错误，不是会话过期）', async () => {
-    const error = { isAxiosError: true, response: { status: 401 }, config: { url: '/api/v1/auth/login' } }
+  it('非 401 错误不跳转', async () => {
+    const error = { isAxiosError: true, response: { status: 500 }, config: { url: '/api/conversations' } }
 
-    await expect(responseRejected()(error)).rejects.toMatchObject({ status: 401 })
+    await expect(responseRejected()(error)).rejects.toMatchObject({ status: 500 })
     expect(router.replace).not.toHaveBeenCalled()
   })
 })

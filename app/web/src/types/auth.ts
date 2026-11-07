@@ -1,26 +1,17 @@
 /**
  * 登录 / 用户相关的领域类型。
  *
- * 这里的形状对应模板自带的 Mock 后端（`mock/auth.ts`）。接入真实后端时只改这一个文件
- * 和 `src/api/auth.ts` 里的路径、字段映射，页面与 store 不需要动。
+ * 形状对应用户中心 OIDC 的 `/userinfo` 与工作台 `/api/me`：
+ * `sub` 是用户 id 的字符串形式（用户名可改，sub 不可改）。
  */
 export interface UserProfile {
-  id: number
+  /** OIDC 的 sub，即 user.id 的字符串形式。 */
+  id: string
   username: string
   displayName: string
   avatarUrl: string | null
   /** 生效权限；服务端是词汇的拥有者，前端不要自己维护第二份权限表。 */
   permissions: string[]
-}
-
-export interface LoginPayload {
-  username: string
-  password: string
-}
-
-export interface LoginResult {
-  token: string
-  user: UserProfile
 }
 
 export interface CurrentUserResult {

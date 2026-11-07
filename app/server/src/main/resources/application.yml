@@ -1,5 +1,11 @@
 server:
   port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        # 与 auth 同在 localhost 时必须改名：cookie 不区分端口，
+        # 两个服务都用 JSESSIONID 会互相覆盖，导致 OAuth 回调找不到授权请求。
+        name: WORKBENCH_SESSION
 
 app:
   version: 0.1.0
@@ -14,6 +20,11 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # 与 auth 共用 MySQL 但各自独立迁移，因此历史表分开（见 auth 的同名配置说明）。
+    # baseline-on-migrate 是必须的：库里已有 auth 建的表，对 server 而言这是"非空 schema"，
+    # 没有它 Flyway 会拒绝初始化自己的历史表。
+    table: flyway_schema_history_server
+    baseline-on-migrate: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}

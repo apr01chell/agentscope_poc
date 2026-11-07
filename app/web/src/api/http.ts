@@ -1,7 +1,6 @@
 import type { AxiosError } from 'axios'
 import type { ApiResult } from '@/types/api'
 import axios from 'axios'
-import { createMockAdapter } from '@/mock/auth'
 
 /**
  * 统一 Axios 实例。
@@ -15,14 +14,9 @@ import { createMockAdapter } from '@/mock/auth'
  * 这个文件**不**导入 store：鉴权拦截器在 `./interceptors.ts`，否则会形成
  * `http → stores/auth → api/auth → http` 的循环依赖。
  */
-export const isMockEnabled = import.meta.env.VITE_USE_MOCK !== 'false'
-
 export const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: Number(import.meta.env.VITE_API_TIMEOUT) || 15_000,
-  // Mock 是「替换适配器」而不是「在 api 函数里写 if」：请求照常经过请求拦截器，
-  // 响应照常走 unwrap 与错误归一化，Mock 与真实网络走同一条代码路径。
-  ...(isMockEnabled ? { adapter: createMockAdapter() } : {}),
 })
 
 /** 归一化后的接口错误：页面只关心这几件事，不需要认识 Axios 的错误形状。 */
