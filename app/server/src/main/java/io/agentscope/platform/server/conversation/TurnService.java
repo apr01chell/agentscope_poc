@@ -1,27 +1,32 @@
 package io.agentscope.platform.server.conversation;
 
+import io.agentscope.platform.server.agent.AgentRuntime;
 import io.agentscope.platform.server.event.EventLog;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
  * 轮次编排。
  *
- * <p>当前 agent 是桩实现（{@link StubAgent}）：先把"提交即返回 202 + 事件流"这条链路跑通，
- * 接真实 HarnessAgent 是 #4 的事。桩的好处是事件序列完全可预测，测试能断言到逐字。
+ * <p>不关心 agent 是桩还是真模型：只依赖平台的 {@link AgentRuntime}，
+ * 把它的三类回调翻译成事件流。接真实模型是 #4，事件归档是 #5。
  */
 @Service
 public class TurnService {
 
+    private static final Logger log = LoggerFactory.getLogger(TurnService.class);
+
     private final ConversationRepository repository;
     private final EventLog events;
-    private final StubAgent agent;
+    private final AgentRuntime agent;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
 
-    public TurnService(ConversationRepository repository, EventLog events, StubAgent agent) {
+    public TurnService(ConversationRepository repository, EventLog events, AgentRuntime agent) {
         this.repository = repository;
         this.events = events;
         this.agent = agent;
@@ -46,16 +51,34 @@ public class TurnService {
             repository.markTurn(turnId, "RUNNING");
             events.append(conversationId, "turn/started", Map.of("turnId", String.valueOf(turnId)));
 
-            agent.reply(input, chunk -> events.append(conversationId, "token", Map.of(
-                    "turnId", String.valueOf(turnId),
-                    "delta", chunk)));
+            agent.stream(input, new AgentRuntime.TokenSink() {
+                @Override
+                public void token(String delta) {
+                    events.append(conversationId, "token", Map.of(
+                            "turnId", String.valueOf(turnId),
+                            "delta", delta));
+                }
 
-            repository.markTurn(turnId, "DONE");
-            events.append(conversationId, "done", Map.of(
-                    "turnId", String.valueOf(turnId),
-                    "usage", "prompt=0 completion=0"));
+                @Override
+                public void done() {
+                    repository.markTurn(turnId, "DONE");
+                    events.append(conversationId, "done", Map.of(
+                            "turnId", String.valueOf(turnId),
+                            "usage", "prompt=0 completion=0"));
+                }
+
+                @Override
+                public void error(String message) {
+                    repository.markTurn(turnId, "FAILED");
+                    events.append(conversationId, "error", Map.of(
+                            "turnId", String.valueOf(turnId),
+                            "message", message == null ? "生成失败" : message));
+                }
+            });
         }
         catch (RuntimeException error) {
+            // 兜底：adapter 自身抛异常（而不是走 sink.error）时也要给前端一个可读结果
+            log.warn("轮次执行失败 turn={}", turnId, error);
             repository.markTurn(turnId, "FAILED");
             events.append(conversationId, "error", Map.of(
                     "turnId", String.valueOf(turnId),

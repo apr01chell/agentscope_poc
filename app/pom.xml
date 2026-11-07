@@ -26,7 +26,27 @@
 
   <properties>
     <java.version>17</java.version>
+    <agentscope.version>2.1.0-BETA1</agentscope.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!--
+        AgentScope Java 锁在 2.1.0-BETA1：产物 SPI 依赖 2.1 才有的 SandboxFileTransfer。
+        不用自建 SNAPSHOT（构建时会因 test-jar 依赖失败）。
+      -->
+      <dependency>
+        <groupId>io.agentscope</groupId>
+        <artifactId>agentscope-harness</artifactId>
+        <version>${agentscope.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.agentscope</groupId>
+        <artifactId>agentscope-extensions-model-openai</artifactId>
+        <version>${agentscope.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 </project>

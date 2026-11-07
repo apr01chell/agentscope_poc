@@ -58,6 +58,16 @@
       <artifactId>mysql-connector-j</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <!-- AgentScope：只在 agent/ 包内出现，见 HarnessAgentRuntime 的说明 -->
+    <dependency>
+      <groupId>io.agentscope</groupId>
+      <artifactId>agentscope-harness</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.agentscope</groupId>
+      <artifactId>agentscope-extensions-model-openai</artifactId>
+    </dependency>
+
     <!-- Spring Framework 7 不再内嵌 commons-logging，见 auth 模块同名依赖的说明 -->
     <dependency>
       <groupId>commons-logging</groupId>

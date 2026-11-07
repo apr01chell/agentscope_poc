@@ -90,6 +90,11 @@ services:
       AUTH_PUBLIC_ISSUER: http://localhost:18081
       AUTH_INTERNAL_ISSUER: http://auth:8081
       APP_WEB_ORIGIN: http://localhost:18088
+      # 模型：默认接 DeepSeek（OpenAI 兼容）。密钥从 deploy/.env 注入，不写进仓库。
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-deepseek}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      MODEL_NAME: ${MODEL_NAME:-deepseek-chat}
+      MODEL_BASE_URL: ${MODEL_BASE_URL:-https://api.deepseek.com}
       MYSQL_HOST: mysql
       MYSQL_PORT: "3306"
       REDIS_HOST: redis
