@@ -4,6 +4,8 @@ import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.model.Model;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.harness.agent.HarnessAgent;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -30,9 +32,14 @@ public class HarnessAgentRuntime implements AgentRuntime {
     private static final Logger log = LoggerFactory.getLogger(HarnessAgentRuntime.class);
 
     private final AgentProperties props;
+    private final Path workspace;
 
-    public HarnessAgentRuntime(AgentProperties props) {
+    public HarnessAgentRuntime(
+            AgentProperties props,
+            @org.springframework.beans.factory.annotation.Value("${app.agent.workspace:/tmp/agentscope}")
+            String workspace) {
         this.props = props;
+        this.workspace = Path.of(workspace);
     }
 
     @Override
@@ -45,9 +52,11 @@ public class HarnessAgentRuntime implements AgentRuntime {
 
         HarnessAgent agent = null;
         try {
+            Files.createDirectories(workspace);
             agent = HarnessAgent.builder()
                     .name("workbench")
                     .agentId("workbench")
+                    .workspace(workspace)
                     .model(model())
                     .build();
 
@@ -76,6 +85,10 @@ public class HarnessAgentRuntime implements AgentRuntime {
                 return;
             }
             sink.done();
+        }
+        catch (java.io.IOException ioFailure) {
+            log.warn("agent 工作区不可写: {}", workspace, ioFailure);
+            sink.error("agent 工作区不可写：" + workspace + "（检查 app.agent.workspace 配置）");
         }
         catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();

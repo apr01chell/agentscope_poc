@@ -71,7 +71,7 @@
 | `ObjectStore` | put/get/head/presign/rangeGet | MySQL BLOB | OSS |
 | `SandboxBackend` | create/exec/upload/download/snapshot/resume/destroy | Docker | agent-sandbox (K8s CRD) |
 | `StateStore` | Agent 状态 `(tenant:user, sessionId)` | Redis | Redis |
-| `EventLog` | 追加/读取/归档事件 | Redis Stream | Redis Stream |
+| `EventLog` | 追加/读取事件（游标 = 自增 id） | MySQL `turn_event` | MySQL |
 | `ArtifactDeliveryTarget` | 框架 SPI，产物落地 | 自实现写 ObjectStore | 同左 |
 
 `ObjectStore` 必须从一开始就声明 `createMultipartUpload` 与 `rangeGet`（v1 可抛 `UnsupportedOperationException`），这样 v2 加分片不改调用方。
@@ -427,13 +427,13 @@ public record ArtifactDeliveryRequest(
 | Q8 | "指令" = 自研产品命令（压缩/模型/下载日志） |
 | Q9/Q11 | 产物：≤3MB 走框架 SPI（JVM 中转），>3MB 沙箱直传 OSS |
 | Q10 | 五个接口第一天就位 + Redis 从第一天接入 |
-| Q12 | 自研 SSE + Redis Stream + `Last-Event-ID` 重放 |
+| Q12 | 自研 SSE + `Last-Event-ID` 重放 |
 | Q13 | skill 在管理页启用，下次对话生效 |
 | Q14 | 独立用户中心（OAuth2.1 授权码 + PKCE + JWT），MCP 走它授权 |
 | Q15 | `/压缩`=压缩上下文历史；`/下载日志`=会话事件 JSONL；`/模型`=会话级切换 |
 | Q16 | 平台统一凭证 + 白名单切模型 + Redis 配额 |
 | Q17 | 框架 SPI + 阈值降级 |
-| Q18 | Redis Stream(TTL 24h) + MySQL 归档 + 无粘性路由 |
+| Q18 | 事件直接落 MySQL（`turn_event`），游标为自增 id，无粘性路由 |
 | Q19 | 用户中心 v1 就做，独立部署，最小 OIDC |
 | Q20 | 按 server 授权；续期失败弹重新授权 |
 | Q21 | 直接调 `ConversationCompactionStrategy.compact` |

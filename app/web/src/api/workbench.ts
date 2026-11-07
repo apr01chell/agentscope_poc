@@ -26,7 +26,8 @@ export interface ConversationDetail {
 
 export interface SubmittedTurn {
   turnId: number
-  cursor: string
+  /** 事件表自增 id，作为 SSE 的 cursor。 */
+  cursor: number
 }
 
 export async function listConversations(): Promise<ConversationSummary[]> {
@@ -47,8 +48,13 @@ export async function submitTurn(id: number, input: string): Promise<SubmittedTu
   )
 }
 
-/** SSE 地址：cursor 为空表示从头读。 */
-export function eventsUrl(id: number, cursor?: string): string {
-  const query = cursor ? `?after=${encodeURIComponent(cursor)}` : ''
+/**
+ * SSE 地址。
+ *
+ * 不传 cursor 表示从头重放整段历史——刷新页面走的就是这条路径。
+ * cursor 是事件表自增 id，与实时推送共用同一套语义。
+ */
+export function eventsUrl(id: number, cursor?: number): string {
+  const query = cursor && cursor > 0 ? `?after=${cursor}` : ''
   return `/api/conversations/${id}/events${query}`
 }
