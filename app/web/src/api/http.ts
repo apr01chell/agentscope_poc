@@ -14,7 +14,31 @@ import axios from 'axios'
  * 这个文件**不**导入 store：鉴权拦截器在 `./interceptors.ts`，否则会形成
  * `http → stores/auth → api/auth → http` 的循环依赖。
  */
+/**
+ * CSRF。
+ *
+ * 不用 axios 内置的 xsrf 机制，也不读 cookie：Spring Security 的 CSRF 令牌是延迟的，
+ * 只有被读取时才写 cookie，前端读不到就会漏带头、所有写请求 403。
+ * 这里显式向 `/api/csrf` 要一次，之后缓存复用。
+ */
+async function fetchCsrfToken(): Promise<string | null> {
+  // 不缓存：令牌与 session 绑定，登录前后是不同的会话，缓存会导致写请求 403。
+  // 一次同源 GET 的代价远小于"偶发 403"的排查成本。
+  try {
+    const { data } = await axios.get<{ data?: { token?: string } }>('/api/csrf', { withCredentials: true })
+    return data?.data?.token ?? null
+  }
+  catch {
+    return null
+  }
+}
+
 export const http = axios.create({
+  // 会话是 cookie，跨 origin 调试时也要带上
+  withCredentials: true,
+  // 关掉 axios 内置的 xsrf：它会把 cookie 里的原始 UUID 塞进 X-XSRF-TOKEN，
+  // 且执行时机在我们的请求拦截器之后，会覆盖掉显式取来的令牌（服务端因此 403）。
+  withXSRFToken: false,
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: Number(import.meta.env.VITE_API_TIMEOUT) || 15_000,
 })
@@ -89,3 +113,14 @@ export async function request<T>(config: Parameters<typeof http.request>[0]): Pr
   const response = await http.request<ApiResult<T>>(config)
   return unwrap(response.data)
 }
+
+http.interceptors.request.use(async (config) => {
+  const method = (config.method ?? 'get').toUpperCase()
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const token = await fetchCsrfToken()
+    if (token) {
+      config.headers.set('X-XSRF-TOKEN', token)
+    }
+  }
+  return config
+})

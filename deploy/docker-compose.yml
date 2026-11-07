@@ -86,6 +86,17 @@ services:
         condition: service_healthy
     environment:
       SERVER_PORT: "8080"
+      # 浏览器可达 vs 容器内回源，见 application.yml 的注释
+      AUTH_PUBLIC_ISSUER: http://localhost:18081
+      AUTH_INTERNAL_ISSUER: http://auth:8081
+      APP_WEB_ORIGIN: http://localhost:18088
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-agent_platform}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppass}
     ports:
       - "${SERVER_PORT:-18080}:8080"
     healthcheck:

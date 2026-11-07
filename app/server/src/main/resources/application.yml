@@ -10,7 +10,10 @@ server:
 app:
   version: 0.1.0
   auth:
-    issuer: ${AUTH_ISSUER:http://localhost:8081}
+    # 浏览器可达的地址（授权端点要用它，否则浏览器被重定向到容器内网名）
+    public-issuer: ${AUTH_PUBLIC_ISSUER:http://localhost:18081}
+    # 服务端回源地址（换 token / 取 JWKS / userinfo），容器内走服务名
+    internal-issuer: ${AUTH_INTERNAL_ISSUER:http://localhost:18081}
 
 spring:
   datasource:
@@ -44,10 +47,10 @@ spring:
           platform-auth:
             # 显式列 URI 而不是 issuer-uri：后者会在启动时做 discovery，
             # 让 server 的启动依赖 auth 已就绪，本地调试与测试都不方便。
-            authorization-uri: ${app.auth.issuer}/oauth2/authorize
-            token-uri: ${app.auth.issuer}/oauth2/token
-            jwk-set-uri: ${app.auth.issuer}/oauth2/jwks
-            user-info-uri: ${app.auth.issuer}/userinfo
+            authorization-uri: ${app.auth.public-issuer}/oauth2/authorize
+            token-uri: ${app.auth.internal-issuer}/oauth2/token
+            jwk-set-uri: ${app.auth.internal-issuer}/oauth2/jwks
+            user-info-uri: ${app.auth.internal-issuer}/userinfo
             user-name-attribute: sub
 
 management:

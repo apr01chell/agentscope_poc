@@ -35,12 +35,19 @@ async function loadList() {
   }
 }
 
+/** 打开会话的请求序号：并发打开时只让最后一次的结果生效，避免旧响应把新会话的气泡冲掉。 */
+let openSeq = 0
+
 async function open(id: number) {
+  const seq = ++openSeq
   closeStream()
   activeId.value = id
   bubbles.value = []
   try {
     const detail = await getConversation(id)
+    if (seq !== openSeq) {
+      return
+    }
     for (const turn of detail.turns as TurnSummary[]) {
       bubbles.value.push({ role: 'user', text: turn.input })
       if (turn.status === 'DONE') {
@@ -50,7 +57,9 @@ async function open(id: number) {
     }
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : '打开会话失败'
+    if (seq === openSeq) {
+      error.value = e instanceof Error ? e.message : '打开会话失败'
+    }
   }
 }
 
@@ -70,16 +79,19 @@ function closeStream() {
   source = null
 }
 
-/** 打开事件流：cursor 之后的事件逐条喂给当前气泡。 */
-function listen(cursor: string) {
-  if (activeId.value === null) {
-    return
-  }
+/**
+ * 打开事件流：cursor 之后的事件逐条喂给当前气泡。
+ *
+ * conversationId 必须由调用方传入，不能在这里读 activeId：
+ * send() 里 submitTurn 是 await 的，期间用户（或自动打开逻辑）可能已经切了会话，
+ * 那就会出现"提交到 A、订阅 B 的事件流"这种静默错位。
+ */
+function listen(conversationId: number, cursor: string) {
   closeStream()
   const assistant: Bubble = { role: 'assistant', text: '' }
   bubbles.value.push(assistant)
 
-  source = new EventSource(eventsUrl(activeId.value, cursor))
+  source = new EventSource(eventsUrl(conversationId, cursor))
 
   const onToken = (event: MessageEvent) => {
     const payload = JSON.parse(event.data) as { delta?: string }
@@ -119,14 +131,15 @@ async function send() {
   if (!text || activeId.value === null || busy.value) {
     return
   }
+  const conversationId = activeId.value
   busy.value = true
   error.value = ''
   bubbles.value.push({ role: 'user', text })
   input.value = ''
 
   try {
-    const submitted = await submitTurn(activeId.value, text)
-    listen(submitted.cursor)
+    const submitted = await submitTurn(conversationId, text)
+    listen(conversationId, submitted.cursor)
   }
   catch (e) {
     busy.value = false

@@ -48,6 +48,9 @@ public class PlatformClaims {
                 return;
             }
             UserAccount user = account.get();
+            // sub 必须与 /userinfo 返回的 sub 一致，否则 OIDC 客户端会判定
+            // invalid_user_info_response（Spring 会比对两者）。统一用 user.id。
+            context.getClaims().subject(String.valueOf(user.id()));
             context.getClaims().claims(claims -> {
                 claims.put("tenant", user.tenantCode());
                 claims.put("role", user.roles());
