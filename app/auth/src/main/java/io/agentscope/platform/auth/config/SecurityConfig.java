@@ -7,6 +7,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.oauth2.server.authorization.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -19,6 +20,8 @@ import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
 @Configuration
 @EnableWebSecurity
+// 管理 API 用 hasAuthority('user:read') 这类权限点注解，需要方法级鉴权
+@EnableMethodSecurity
 public class SecurityConfig {
 
     /**
@@ -53,6 +56,8 @@ public class SecurityConfig {
         http.authorizeHttpRequests(authorize -> authorize
                         // 健康检查必须匿名可达：compose 用它探活，浏览器也用它判断后端是否在线
                         .requestMatchers("/api/health", "/actuator/health", "/error", "/favicon.ico").permitAll()
+                        // 登录前就要拿 CSRF 令牌，否则表单提交会被 403 拦掉
+                        .requestMatchers("/auth/csrf").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginPage("/login")

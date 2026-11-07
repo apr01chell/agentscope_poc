@@ -15,6 +15,7 @@ app/
   common/        两个服务共享的线上契约（响应信封）
   server/        工作台后端（8080）
   auth/          用户中心（8081）
+  auth-console/  用户中心控制台（Vite 5174）
   web/           Vue 3 + TS 前端（Vite 5173 / 容器 8088）
 deploy/
   docker-compose.yml   全栈编排
@@ -83,6 +84,25 @@ cd deploy && docker compose ps
 ```
 
 CI 跑同样的三件事，见 `.github/workflows/ci.yml`。
+
+## 用户中心控制台
+
+`app/auth-console` 是用户中心自带的控制台（Vue 3 + Element Plus），与 auth **同源**：开发时由 Vite 代理 `/auth`、`/oauth2`、`/userinfo` 到 `:8081`，生产由 nginx 反代（见工单 #28）。
+
+```bash
+cd app/auth-console
+pnpm install
+pnpm dev          # http://localhost:5174
+```
+
+用 `admin` / `admin123` 登录后可管理用户、角色（含权限勾选）与 OAuth2 客户端。
+
+两个容易踩的点：
+
+- **不要代理 `/login`**：`GET /login` 是 SPA 的路由，只有 `POST /auth/login` 才该到 auth。代理 `/login` 会让浏览器拿到 auth 的服务端登录页，SPA 根本不渲染。
+- **代理不要 `changeOrigin: true`**：否则 Spring 会用 `:8081` 生成绝对跳转，session cookie 与重定向都会跑到错误的 origin。
+
+控制台与 auth 同源，所以写请求必须带 CSRF 令牌：登录前先取 `/auth/csrf`（该端点匿名可访问），之后放在 `X-CSRF-TOKEN` 头里。
 
 ## 用户中心（OIDC）
 
