@@ -3,6 +3,8 @@ package io.agentscope.platform.auth.seed;
 import io.agentscope.platform.auth.config.AuthProperties;
 import io.agentscope.platform.auth.rbac.UserRepository;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -77,7 +79,19 @@ public class PlatformSeeder implements ApplicationRunner {
 
     private void seedWorkbenchClient() {
         AuthProperties.WorkbenchClient wb = props.workbenchClient();
-        if (clients.findByClientId(wb.clientId()) != null) {
+        List<String> redirectUris = Arrays.stream(wb.redirectUris().split(","))
+                .map(String::trim).filter(s -> !s.isBlank()).toList();
+
+        RegisteredClient existing = clients.findByClientId(wb.clientId());
+        if (existing != null) {
+            // 已存在则只同步回调地址：开发（5173）与容器（8080）的回调不同，
+            // 不同步的话换一种启动方式就会 invalid_redirect_uri。
+            clients.save(RegisteredClient.from(existing)
+                    .redirectUris(uris -> {
+                        uris.clear();
+                        uris.addAll(redirectUris);
+                    })
+                    .build());
             return;
         }
         clients.save(RegisteredClient.withId(UUID.randomUUID().toString())
@@ -87,7 +101,7 @@ public class PlatformSeeder implements ApplicationRunner {
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri(wb.redirectUri())
+                .redirectUris(uris -> uris.addAll(redirectUris))
                 .postLogoutRedirectUri("http://localhost:8088/")
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)

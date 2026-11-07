@@ -5,7 +5,6 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const appTitle = import.meta.env.VITE_APP_TITLE ?? '前端基础模板'
-const isMockEnabled = import.meta.env.VITE_USE_MOCK !== 'false'
 
 /**
  * VueUse：每秒刷新的当前时间。
@@ -71,7 +70,7 @@ const capabilities = [
             接口模式
           </p>
           <p class="mt-0 mb-1 text-xl font-semibold text-text">
-            {{ isMockEnabled ? 'Mock 后端' : '真实后端' }}
+            真实后端
           </p>
           <p class="m-0 text-xs text-muted">
             开关：<code>VITE_USE_MOCK</code>

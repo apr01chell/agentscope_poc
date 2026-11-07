@@ -12,7 +12,7 @@ import { safeRedirect } from './safe-redirect'
  * - 业务页面按领域拆到 `src/modules/<domain>/`，这里只做懒加载登记。
  */
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/home' },
+  { path: '/', redirect: '/workbench' },
   {
     path: '/login',
     name: 'login',
@@ -24,6 +24,12 @@ const routes: RouteRecordRaw[] = [
     name: 'home',
     component: () => import('@/views/HomeView.vue'),
     meta: { title: '首页', requiresAuth: true },
+  },
+  {
+    path: '/workbench',
+    name: 'workbench',
+    component: () => import('@/views/WorkbenchView.vue'),
+    meta: { title: '工作台', requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',

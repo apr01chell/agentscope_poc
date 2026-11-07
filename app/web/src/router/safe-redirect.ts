@@ -5,7 +5,7 @@
  * `router.replace(redirect)` 就是一个开放重定向漏洞。登录页与路由守卫共用这一份实现，
  * 避免「守卫拦了、登录页没拦」这种只在一侧出现的缺口。
  */
-export function safeRedirect(value: unknown, fallback = '/home'): string {
+export function safeRedirect(value: unknown, fallback = '/workbench'): string {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//'))
     return fallback
   return value

@@ -1,5 +1,10 @@
 server:
   port: ${AUTH_PORT:8081}
+  servlet:
+    session:
+      cookie:
+        # 见 server 侧同名配置：cookie 不区分端口，两个服务必须用不同的名字
+        name: AUTH_SESSION
 
 app:
   version: 0.1.0
@@ -15,7 +20,8 @@ app:
     workbench-client:
       client-id: ${AUTH_WORKBENCH_CLIENT_ID:workbench}
       client-secret: ${AUTH_WORKBENCH_CLIENT_SECRET:workbench-secret}
-      redirect-uri: ${AUTH_WORKBENCH_REDIRECT_URI:http://localhost:8080/login/oauth2/code/workbench}
+      # 逗号分隔：容器（8080）与 vite dev（5173）各一个
+      redirect-uris: ${AUTH_WORKBENCH_REDIRECT_URIS:http://localhost:8080/login/oauth2/code/workbench,http://localhost:5173/login/oauth2/code/workbench,http://localhost:18088/login/oauth2/code/workbench}
 
 spring:
   datasource:
@@ -27,6 +33,10 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+    # server 与 auth 共用同一个 MySQL，但各有独立的迁移集。
+    # 共用一个历史表会让每个模块把对方的迁移当成"已应用但本地不存在"而拒绝启动，
+    # 所以按模块分表；版本号区间也各自划分（auth V1–V99，server V100–V199）。
+    table: flyway_schema_history_auth
 
 management:
   endpoints:

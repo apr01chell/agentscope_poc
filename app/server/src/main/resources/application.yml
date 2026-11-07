@@ -1,8 +1,57 @@
 server:
   port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        # 与 auth 同在 localhost 时必须改名：cookie 不区分端口，
+        # 两个服务都用 JSESSIONID 会互相覆盖，导致 OAuth 回调找不到授权请求。
+        name: WORKBENCH_SESSION
 
 app:
   version: 0.1.0
+  auth:
+    # 浏览器可达的地址（授权端点要用它，否则浏览器被重定向到容器内网名）
+    public-issuer: ${AUTH_PUBLIC_ISSUER:http://localhost:18081}
+    # 服务端回源地址（换 token / 取 JWKS / userinfo），容器内走服务名
+    internal-issuer: ${AUTH_INTERNAL_ISSUER:http://localhost:18081}
+
+spring:
+  datasource:
+    url: "jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:13306}/${MYSQL_DATABASE:agent_platform}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+    username: ${MYSQL_USER:app}
+    password: ${MYSQL_PASSWORD:apppass}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 与 auth 共用 MySQL 但各自独立迁移，因此历史表分开（见 auth 的同名配置说明）。
+    # baseline-on-migrate 是必须的：库里已有 auth 建的表，对 server 而言这是"非空 schema"，
+    # 没有它 Flyway 会拒绝初始化自己的历史表。
+    table: flyway_schema_history_server
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:16379}
+  security:
+    oauth2:
+      client:
+        registration:
+          workbench:
+            provider: platform-auth
+            client-id: ${AUTH_CLIENT_ID:workbench}
+            client-secret: ${AUTH_CLIENT_SECRET:workbench-secret}
+            authorization-grant-type: authorization_code
+            scope: openid,profile
+            redirect-uri: "{baseUrl}/login/oauth2/code/workbench"
+        provider:
+          platform-auth:
+            # 显式列 URI 而不是 issuer-uri：后者会在启动时做 discovery，
+            # 让 server 的启动依赖 auth 已就绪，本地调试与测试都不方便。
+            authorization-uri: ${app.auth.public-issuer}/oauth2/authorize
+            token-uri: ${app.auth.internal-issuer}/oauth2/token
+            jwk-set-uri: ${app.auth.internal-issuer}/oauth2/jwks
+            user-info-uri: ${app.auth.internal-issuer}/userinfo
+            user-name-attribute: sub
 
 management:
   endpoints:
@@ -12,11 +61,6 @@ management:
   endpoint:
     health:
       show-details: always
-  health:
-    # 中间件尚未接入（MySQL/Redis/RustFS 在后续工单里接），此处先不探测外部依赖，
-    # 否则本地只起后端时会误报 DOWN。
-    defaults:
-      enabled: false
 
 logging:
   level:

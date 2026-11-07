@@ -25,5 +25,9 @@ public record AuthProperties(
     public record WorkbenchClient(
             String clientId,
             String clientSecret,
-            String redirectUri) {}
+            /**
+             * 逗号分隔的多个回调地址：dev（vite 5173）与容器（8080）各一个。
+             * 回调地址是按请求 Host 推导的，两处调试需要各自登记。
+             */
+            String redirectUris) {}
 }
