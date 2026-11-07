@@ -16,59 +16,69 @@ app/
   server/        工作台后端（8080）
   auth/          用户中心（8081）
   auth-console/  用户中心控制台（Vite 5174）
-  web/           Vue 3 + TS 前端（Vite 5173 / 容器 8088）
+  web/           Vue 3 + TS 前端（Vite 5173 / 容器 18088）
 deploy/
-  docker-compose.yml   全栈编排
+  docker-compose.yml   中间件默认；应用服务在 full profile
   .env.example         端口与凭证示例
 ```
 
 ## 本地启动
 
-### 方式一：全栈容器（验证用）
+默认**只起中间件**，后端在 IDE 里跑、前端用 vite 跑——改代码不用重建镜像，也不用和容器争端口。
+
+### 中间件（日常开发）
 
 ```bash
 cd deploy
 cp .env.example .env     # 可选，改端口或凭证
-docker compose up -d
-docker compose ps        # 六个服务都应为 healthy
+docker compose up -d     # mysql + redis + rustfs
 ```
 
-打开 <http://localhost:8088>，登录页底部应显示「后端已连接 · server v0.1.0」。
-
-### 方式二：中间件容器 + 本地进程（日常开发）
-
-```bash
-cd deploy && docker compose up -d mysql redis rustfs
-```
-
-后端（需要 JDK 17）：
+### 后端（IDE 或命令行）
 
 ```bash
 cd app
 mvn verify                                    # 编译 + 单测
-mvn -pl server spring-boot:run                # 或直接在 IDE 里跑 ServerApplication
+mvn -pl server spring-boot:run                # 工作台后端 :8080
+mvn -pl auth   spring-boot:run                # 用户中心   :8081
 ```
 
-前端：
+两个服务默认连 `localhost:13306` 的 MySQL，与 compose 起的中间件一致。
+
+### 前端
 
 ```bash
 cd app/web
-pnpm install
-pnpm dev          # http://localhost:5173，/api 代理到 localhost:8080
+pnpm install && pnpm dev          # http://localhost:5173，/api 代理到 :8080
+
+cd app/auth-console
+pnpm install && pnpm dev          # http://localhost:5174，/auth 代理到 :8081
 ```
+
+### 容器化全栈（验证用）
+
+```bash
+cd deploy
+docker compose --profile full up -d
+```
+
+应用服务放在 `full` profile 里，宿主端口是 **18080 / 18081 / 18088**，
+所以它能和本地 IDEA（8080/8081）、vite（5173/5174）同时跑，互不干扰。
 
 ## 端口
 
-| 服务 | 端口 | 说明 |
-|---|---|---|
-| web | 8088（容器）/ 5173（dev） | 前端 |
-| server | 8080 | 工作台后端 |
-| auth | 8081 | 用户中心（RBAC + OIDC） |
-| MySQL | **13306** → 3306 | 避开本机已有 MySQL |
-| Redis | **16379** → 6379 | 避开本机已有 Redis |
-| RustFS | 9000 / 9001 | S3 API / 控制台，凭证默认 `rustfsadmin` |
+| 服务 | 本地调试 | 容器（full profile） | 说明 |
+|---|---|---|---|
+| web（工作台前端） | 5173 | 18088 | vite dev / nginx |
+| server | 8080 | 18080 | 工作台后端 |
+| auth | 8081 | 18081 | 用户中心 |
+| auth-console | 5174 | 未容器化（#28） | 控制台 |
+| MySQL | — | **13306** → 3306 | 避开本机已有 MySQL |
+| Redis | — | **16379** → 6379 | 避开本机已有 Redis |
+| RustFS | — | 9000 / 9001 | S3 API / 控制台，凭证默认 `rustfsadmin` |
 
-MySQL 与 Redis 故意不用默认端口：本机常已有其他项目的实例在跑，端口冲突会让 `compose up` 直接失败。
+容器端口故意与本地端口错开：**full profile 与本地调试可以同时运行**。
+MySQL/Redis 不用默认端口，是因为本机常已有其他项目的实例在跑。
 
 ## 验证
 
@@ -79,7 +89,10 @@ cd app && mvn verify
 # 前端：lint + 类型 + 单测
 cd app/web && pnpm lint && pnpm typecheck && pnpm test
 
-# 全栈健康
+# 控制台：类型 + 单测
+cd app/auth-console && pnpm typecheck && pnpm test
+
+# 中间件健康（加 --profile full 则连应用服务一起）
 cd deploy && docker compose ps
 ```
 

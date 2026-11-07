@@ -1,8 +1,12 @@
 name: agent-platform
 
-# 一条命令起全栈：三个服务 + 三个中间件。
-# 日常开发只想要中间件时：`docker compose up mysql redis rustfs`
-# 三个 Java/Node 服务建议在本地跑（IDE / pnpm dev），改代码不用重建镜像。
+# 默认只起中间件：mysql / redis / rustfs —— 给 IDEA 与 vite 让路。
+#
+#   docker compose up -d                     # 三个中间件
+#   docker compose --profile full up -d      # 再加 server / auth / web（验证用）
+#
+# 应用服务放在 full profile 里，且宿主端口是 18080/18081/18088：
+# 这样即使 full profile 正在跑，本地 IDEA（8080/8081）与 vite（5173/5174）也不冲突。
 
 services:
   mysql:
@@ -69,6 +73,7 @@ services:
       start_period: 10s
 
   server:
+    profiles: ["full"]
     build:
       context: ../app
       dockerfile: server/Dockerfile
@@ -82,7 +87,7 @@ services:
     environment:
       SERVER_PORT: "8080"
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "${SERVER_PORT:-18080}:8080"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
       interval: 5s
@@ -91,6 +96,7 @@ services:
       start_period: 20s
 
   auth:
+    profiles: ["full"]
     build:
       context: ../app
       dockerfile: auth/Dockerfile
@@ -106,7 +112,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-app}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppass}
     ports:
-      - "${AUTH_PORT:-8081}:8081"
+      - "${AUTH_PORT:-18081}:8081"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/api/health"]
       interval: 5s
@@ -115,6 +121,7 @@ services:
       start_period: 20s
 
   web:
+    profiles: ["full"]
     build:
       context: ../app/web
       dockerfile: Dockerfile
@@ -122,7 +129,7 @@ services:
       server:
         condition: service_healthy
     ports:
-      - "${WEB_PORT:-8088}:80"
+      - "${WEB_PORT:-18088}:80"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
       interval: 5s
