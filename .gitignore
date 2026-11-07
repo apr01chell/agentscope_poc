@@ -28,3 +28,6 @@ playwright-report/
 
 # gh / 工具缓存（本机沙箱把 XDG_CACHE_HOME 指到工作区时会产生）
 .cache/
+
+# HarnessAgent 运行时创建的工作目录
+.agentscope/
