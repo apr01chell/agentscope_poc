@@ -8,12 +8,14 @@ import io.agentscope.harness.agent.DistributedStore;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.filesystem.spec.RemoteFilesystemSpec;
+import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -38,12 +40,15 @@ public class HarnessAgentRuntime implements AgentRuntime {
 
     private final AgentProperties props;
     private final DistributedStore store;
+    private final Path workspace;
 
     public HarnessAgentRuntime(
             AgentProperties props,
-            @Autowired(required = false) DistributedStore store) {
+            @Autowired(required = false) DistributedStore store,
+            @Value("${app.agent.workspace:/tmp/agentscope}") String workspace) {
         this.props = props;
         this.store = store;
+        this.workspace = Path.of(workspace);
     }
 
     @Override
@@ -122,7 +127,14 @@ public class HarnessAgentRuntime implements AgentRuntime {
             builder.distributedStore(store)
                     // SESSION 而不是 USER：每个会话独立工作区，
                     // 否则同一用户的多个会话会共享 MEMORY.md 和文件，互相污染
-                    .filesystem(new RemoteFilesystemSpec().isolationScope(IsolationScope.SESSION));
+                    .filesystem(new RemoteFilesystemSpec()
+                            .isolationScope(IsolationScope.SESSION)
+                            // 关键：会话日志（journal）落在工作区的 agents/ 前缀下。
+                            // 不显式路由它，CompositeFilesystem 会把它交给本地文件系统，
+                            // 于是 journal 又回到磁盘（容器里还会 AccessDenied）。
+                            .addSharedPrefix("agents/"))
+                    // 本地只做暂存；会话状态与日志走上面的分布式存储
+                    .workspace(workspace);
         }
         return builder.build();
     }

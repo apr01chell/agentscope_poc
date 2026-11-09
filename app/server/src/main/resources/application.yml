@@ -17,6 +17,9 @@ app:
     base-url: ${MODEL_BASE_URL:https://api.deepseek.com}
     name: ${MODEL_NAME:deepseek-chat}
     timeout-seconds: ${MODEL_TIMEOUT_SECONDS:120}
+  agent:
+    # 本地暂存目录（仅作临时工作区）。会话状态与会话日志走 MySQL（见 DistributedStore）。
+    workspace: ${AGENT_WORKSPACE:/tmp/agentscope}
   auth:
     # 浏览器可达的地址（授权端点要用它，否则浏览器被重定向到容器内网名）
     public-issuer: ${AUTH_PUBLIC_ISSUER:http://localhost:18081}

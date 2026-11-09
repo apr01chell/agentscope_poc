@@ -14,7 +14,8 @@ class HarnessAgentRuntimeTest {
     void missingApiKeyProducesReadableError() {
         HarnessAgentRuntime runtime = new HarnessAgentRuntime(
                 new AgentProperties("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 5),
-                null);
+                null,
+                "/tmp/agentscope-test");
 
         List<String> errors = new ArrayList<>();
         List<String> tokens = new ArrayList<>();
