@@ -111,6 +111,31 @@ class DockerSandboxContractTest {
     }
 
     @Test
+    void alpineFailsThePosixContract() throws Exception {
+        assumeTrue(dockerAvailable, "本机没有 Docker，跳过契约测试");
+
+        // 这条是"负面契约"：证明为什么不能用 alpine。
+        // 注意：busybox 的 sh / stat -c / tar / base64 其实是齐的（实测），
+        // 真正缺的是 GNU 扩展——模型很爱用 `grep -P`、`sed -i`、`tar --exclude` 之类。
+        DockerSandboxBackend alpine = new DockerSandboxBackend(
+                "alpine:3.20", "/workspace", "none", 60);
+        String key = "alpine-" + UUID.randomUUID();
+        try {
+            Sandbox sandbox = alpine.ensure(key);
+            Sandbox.ExecResult result = sandbox.exec("grep -P '\\d' /etc/hostname");
+            assertFalse(result.exitCode() == 0,
+                    "alpine 不应通过契约（busybox grep 不支持 -P），但 exit=0: " + result.stdout());
+        }
+        catch (SandboxException noAlpine) {
+            // 拉不到 alpine（离线/网络问题）也算跳过，不把它当成失败
+            assumeTrue(false, "无法启动 alpine 镜像，跳过负面契约：" + noAlpine.getMessage());
+        }
+        finally {
+            alpine.destroy(key);
+        }
+    }
+
+    @Test
     void destroyIsIdempotent() {
         assumeTrue(dockerAvailable, "本机没有 Docker，跳过契约测试");
 
