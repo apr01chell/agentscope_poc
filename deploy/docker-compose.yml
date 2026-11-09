@@ -84,6 +84,13 @@ services:
         condition: service_healthy
       rustfs:
         condition: service_healthy
+    volumes:
+      # 沙箱由 server 通过 docker CLI 创建，需要访问宿主 Docker。
+      # socket 是 root:root 0660，而镜像以 appuser 运行，所以把 appuser 加进 root 组
+      # （仅开发环境；生产用 K8s 时由 agent-sandbox CRD 承担，不需要 socket）。
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
     environment:
       SERVER_PORT: "8080"
       # 浏览器可达 vs 容器内回源，见 application.yml 的注释
@@ -95,6 +102,9 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       MODEL_NAME: ${MODEL_NAME:-deepseek-chat}
       MODEL_BASE_URL: ${MODEL_BASE_URL:-https://api.deepseek.com}
+      # 沙箱：容器里需要能创建容器，所以要挂 docker socket
+      SANDBOX_ENABLED: ${SANDBOX_ENABLED:-true}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ubuntu:24.04}
       MYSQL_HOST: mysql
       MYSQL_PORT: "3306"
       REDIS_HOST: redis

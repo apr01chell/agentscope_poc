@@ -2,12 +2,17 @@ package io.agentscope.platform.server.agent;
 
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.TextBlockDeltaEvent;
+import io.agentscope.core.session.JournalSessionLog;
+import io.agentscope.core.session.SessionLog;
+import io.agentscope.core.session.SessionLogStore;
+import io.agentscope.harness.agent.session.StoreSessionStorage;
 import io.agentscope.core.model.Model;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.harness.agent.DistributedStore;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.filesystem.spec.RemoteFilesystemSpec;
+import io.agentscope.harness.agent.sandbox.impl.docker.DockerFilesystemSpec;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +50,8 @@ public class HarnessAgentRuntime implements AgentRuntime {
     private final AgentProperties props;
     private final DistributedStore store;
     private final Path workspace;
+    private final boolean sandboxEnabled;
+    private final String sandboxImage;
 
     /** 正在进行的订阅，按会话 id 索引，供中断使用。 */
     private final Map<Long, Disposable> running = new ConcurrentHashMap<>();
@@ -53,10 +60,14 @@ public class HarnessAgentRuntime implements AgentRuntime {
     public HarnessAgentRuntime(
             AgentProperties props,
             @Autowired(required = false) DistributedStore store,
-            @Value("${app.agent.workspace:/tmp/agentscope}") String workspace) {
+            @Value("${app.agent.workspace:/tmp/agentscope}") String workspace,
+            @Value("${app.sandbox.enabled:false}") boolean sandboxEnabled,
+            @Value("${app.sandbox.image:ubuntu:24.04}") String sandboxImage) {
         this.props = props;
         this.store = store;
         this.workspace = Path.of(workspace);
+        this.sandboxEnabled = sandboxEnabled;
+        this.sandboxImage = sandboxImage;
     }
 
     @Override
@@ -150,17 +161,37 @@ public class HarnessAgentRuntime implements AgentRuntime {
                 .agentId("workbench")
                 .model(model());
 
+        // 会话状态与会话日志始终落 MySQL：沙箱是可丢弃的，不能让它承载记忆
         if (store != null) {
-            builder.distributedStore(store)
-                    // SESSION 而不是 USER：每个会话独立工作区，
-                    // 否则同一用户的多个会话会共享 MEMORY.md 和文件，互相污染
-                    .filesystem(new RemoteFilesystemSpec()
+            builder.distributedStore(store);
+        }
+
+        if (sandboxEnabled && store != null) {
+            // 沙箱文件系统不提供持久化会话存储（容器随时会被销毁），
+            // 所以显式把 journal 指到 MySQL 的 BaseStore 上：用官方 JournalSessionLog +
+            // StoreSessionStorage，不自己实现 SessionLogStore 的并发语义。
+            SessionLogStore logStore = (key, context) -> {
+                String path = key.storagePath();
+                return new JournalSessionLog(
+                        new StoreSessionStorage(store.baseStore(), java.util.List.of("agents/")),
+                        path);
+            };
+            builder.sessionLogStore(logStore);
+        }
+
+        if (sandboxEnabled) {
+            // 代码执行下沉到容器：shell / 读写文件都发生在沙箱里。
+            // 沙箱文件系统是分层的——AGENTS.md / skills / knowledge 由外层投影进沙箱，
+            // 会话日志仍走上面的 distributedStore。
+            builder.filesystem(new DockerFilesystemSpec()
+                    .image(sandboxImage)
+                    .workspaceRoot("/workspace"));
+        }
+        else if (store != null) {
+            // 不用沙箱时，工作区整体走远程存储；agents/ 是会话日志所在，必须显式路由
+            builder.filesystem(new RemoteFilesystemSpec()
                             .isolationScope(IsolationScope.SESSION)
-                            // 关键：会话日志（journal）落在工作区的 agents/ 前缀下。
-                            // 不显式路由它，CompositeFilesystem 会把它交给本地文件系统，
-                            // 于是 journal 又回到磁盘（容器里还会 AccessDenied）。
                             .addSharedPrefix("agents/"))
-                    // 本地只做暂存；会话状态与日志走上面的分布式存储
                     .workspace(workspace);
         }
         return builder.build();

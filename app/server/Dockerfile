@@ -13,12 +13,18 @@ COPY common/src common/src
 COPY server/src server/src
 RUN mvn -B -pl server -am -DskipTests package
 
+# 沙箱实现（框架的 DockerSandbox）通过 docker CLI 创建容器，
+# 运行镜像里必须有这个二进制；从官方 cli 镜像拷一个，避免装整个 daemon。
+FROM docker:27-cli AS dockercli
+
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 appuser
+ && useradd --system --uid 10001 --create-home appuser \
+ && chown -R appuser:appuser /home/appuser
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=build /build/server/target/server-*.jar app.jar
 USER appuser
 EXPOSE 8080

@@ -15,7 +15,9 @@ class HarnessAgentRuntimeTest {
         HarnessAgentRuntime runtime = new HarnessAgentRuntime(
                 new AgentProperties("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 5),
                 null,
-                "/tmp/agentscope-test");
+                "/tmp/agentscope-test",
+                false,
+                "ubuntu:24.04");
 
         List<String> errors = new ArrayList<>();
         List<String> tokens = new ArrayList<>();
