@@ -17,6 +17,11 @@ app:
     base-url: ${MODEL_BASE_URL:https://api.deepseek.com}
     name: ${MODEL_NAME:deepseek-chat}
     timeout-seconds: ${MODEL_TIMEOUT_SECONDS:120}
+  turn:
+    # 同一会话最多 1 个执行中 + 1 个排队；再多就 429
+    max-active: ${TURN_MAX_ACTIVE:2}
+    # 排队超过这个时间判失败（可读原因给到前端）
+    queue-timeout-seconds: ${TURN_QUEUE_TIMEOUT_SECONDS:600}
   agent:
     # 本地暂存目录（仅作临时工作区）。会话状态与会话日志走 MySQL（见 DistributedStore）。
     workspace: ${AGENT_WORKSPACE:/tmp/agentscope}

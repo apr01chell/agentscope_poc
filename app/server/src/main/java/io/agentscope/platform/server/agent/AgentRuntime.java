@@ -17,6 +17,14 @@ public interface AgentRuntime {
     void stream(AgentRequest request, TokenSink sink);
 
     /**
+     * 中断某个会话正在进行的生成（幂等）。
+     *
+     * <p>调用后 {@link #stream} 应尽快返回，且**不再**调用 sink 的任何方法——
+     * 中断事件由上层（TurnService）负责发，避免同一件事两个来源。
+     */
+    void cancel(long conversationId);
+
+    /**
      * 一轮请求的上下文。
      *
      * @param userId         用户标识（agent 状态的隔离维度之一）

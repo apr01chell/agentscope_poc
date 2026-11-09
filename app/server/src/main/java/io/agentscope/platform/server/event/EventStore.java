@@ -63,6 +63,33 @@ public class EventStore {
                 .list();
     }
 
+    /**
+     * 追加一条"由非工作线程发出"的事件（例如取消/中断）。
+     *
+     * <p>与工作线程的计数器并发时可能撞唯一键，所以算下一个 seq 并重试：
+     * 竞争只可能发生在取消的瞬间，重试几次必然成功。
+     */
+    public long appendNext(long conversationId, long turnId, String type, Map<String, Object> payload) {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            try {
+                return append(conversationId, turnId, nextSeq(turnId), type, payload);
+            }
+            catch (org.springframework.dao.DuplicateKeyException raced) {
+                // 另一个写入者先占了序号，重算
+            }
+        }
+        throw new IllegalStateException("事件序号连续冲突，放弃写入：" + type);
+    }
+
+    /** 该轮次的下一个事件序号（给"非工作线程"发终止事件用，例如取消）。 */
+    public int nextSeq(long turnId) {
+        Integer max = jdbc.sql("SELECT COALESCE(MAX(seq), 0) FROM turn_event WHERE turn_id = :tid")
+                .param("tid", turnId)
+                .query(Integer.class)
+                .single();
+        return (max == null ? 0 : max) + 1;
+    }
+
     /** 该会话已落库的事件数（测试与运维用）。 */
     public long count(long conversationId) {
         return jdbc.sql("SELECT COUNT(*) FROM turn_event WHERE conversation_id = :cid")
