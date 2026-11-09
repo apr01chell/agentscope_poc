@@ -14,11 +14,11 @@ class HarnessAgentRuntimeTest {
     void missingApiKeyProducesReadableError() {
         HarnessAgentRuntime runtime = new HarnessAgentRuntime(
                 new AgentProperties("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 5),
-                "/tmp/agentscope-test");
+                null);
 
         List<String> errors = new ArrayList<>();
         List<String> tokens = new ArrayList<>();
-        runtime.stream("你好", new AgentRuntime.TokenSink() {
+        runtime.stream(new AgentRuntime.AgentRequest("1", 1L, "你好"), new AgentRuntime.TokenSink() {
             @Override
             public void token(String delta) {
                 tokens.add(delta);

@@ -34,7 +34,7 @@ public class TurnService {
     }
 
     /** 提交一轮：立即返回 turnId 与 cursor，实际生成在后台线程里跑。 */
-    public SubmittedTurn submit(long conversationId, String input) {
+    public SubmittedTurn submit(long conversationId, String input, String ownerSub) {
         int turnSeq = repository.nextSeq(conversationId);
         long turnId = repository.createTurn(conversationId, turnSeq, input);
         repository.touchConversation(conversationId);
@@ -45,17 +45,19 @@ public class TurnService {
                 "turnSeq", turnSeq,
                 "input", input));
 
-        executor.submit(() -> run(conversationId, turnId, input));
+        executor.submit(() -> run(conversationId, turnId, input, ownerSub));
         return new SubmittedTurn(turnId, cursor);
     }
 
-    private void run(long conversationId, long turnId, String input) {
+    private void run(long conversationId, long turnId, String input, String ownerSub) {
         AtomicInteger seq = new AtomicInteger(1);
         try {
             repository.markTurn(turnId, "RUNNING");
             events.append(conversationId, turnId, seq.incrementAndGet(), "turn/started", Map.of("turnId", turnId));
 
-            agent.stream(input, new AgentRuntime.TokenSink() {
+            AgentRuntime.AgentRequest request =
+                    new AgentRuntime.AgentRequest(ownerSub, conversationId, input);
+            agent.stream(request, new AgentRuntime.TokenSink() {
                 @Override
                 public void token(String delta) {
                     events.append(conversationId, turnId, seq.incrementAndGet(), "token",

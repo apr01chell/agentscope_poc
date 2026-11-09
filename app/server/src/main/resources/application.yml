@@ -17,10 +17,6 @@ app:
     base-url: ${MODEL_BASE_URL:https://api.deepseek.com}
     name: ${MODEL_NAME:deepseek-chat}
     timeout-seconds: ${MODEL_TIMEOUT_SECONDS:120}
-  agent:
-    # HarnessAgent 的会话日志目录。容器里镜像以非 root 运行，/app 不可写，
-    # 必须指向可写路径，否则每轮都报 Journal CAS failed: AccessDeniedException。
-    workspace: ${AGENT_WORKSPACE:/tmp/agentscope}
   auth:
     # 浏览器可达的地址（授权端点要用它，否则浏览器被重定向到容器内网名）
     public-issuer: ${AUTH_PUBLIC_ISSUER:http://localhost:18081}

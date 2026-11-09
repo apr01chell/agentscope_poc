@@ -14,7 +14,16 @@ public interface AgentRuntime {
      * <p>实现必须在**当前线程**上把事件推给 sink（同步或阻塞等待都行），
      * 因为调用方（TurnService 的工作线程）要做顺序保证：先 token 后 done。
      */
-    void stream(String input, TokenSink sink);
+    void stream(AgentRequest request, TokenSink sink);
+
+    /**
+     * 一轮请求的上下文。
+     *
+     * @param userId         用户标识（agent 状态的隔离维度之一）
+     * @param conversationId 会话标识（另一个隔离维度：不同会话不能共享上下文）
+     * @param input          本轮输入
+     */
+    record AgentRequest(String userId, long conversationId, String input) {}
 
     /** 事件出口。实现方保证 done 与 error 至多发生一个。 */
     interface TokenSink {

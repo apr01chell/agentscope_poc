@@ -1,16 +1,19 @@
 package io.agentscope.platform.server.agent;
 
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.model.Model;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
+import io.agentscope.harness.agent.DistributedStore;
 import io.agentscope.harness.agent.HarnessAgent;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import io.agentscope.harness.agent.IsolationScope;
+import io.agentscope.harness.agent.filesystem.spec.RemoteFilesystemSpec;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -23,7 +26,9 @@ import reactor.core.scheduler.Schedulers;
  * `io.agentscope.*` —— 框架在 2.0 已经有过一次 breaking change，把它的类型散到业务代码里
  * 意味着每次升级都要全仓改。
  *
- * <p>用 OpenAI 兼容协议接 DeepSeek：换别的供应商（Kimi/GLM/私有 vLLM）只需要改 baseUrl 与模型名。
+ * <p>持久化全部交给 {@link DistributedStore}（MySQL）：
+ * 工作区用 {@link RemoteFilesystemSpec}，所以 `sessions/`（会话日志）、`MEMORY.md`、
+ * `skills/` 都不落本地磁盘。容器非 root、多副本不共享磁盘，落文件等于换实例就失忆。
  */
 @Component
 @ConditionalOnProperty(name = "app.model.provider", havingValue = "deepseek")
@@ -32,18 +37,17 @@ public class HarnessAgentRuntime implements AgentRuntime {
     private static final Logger log = LoggerFactory.getLogger(HarnessAgentRuntime.class);
 
     private final AgentProperties props;
-    private final Path workspace;
+    private final DistributedStore store;
 
     public HarnessAgentRuntime(
             AgentProperties props,
-            @org.springframework.beans.factory.annotation.Value("${app.agent.workspace:/tmp/agentscope}")
-            String workspace) {
+            @Autowired(required = false) DistributedStore store) {
         this.props = props;
-        this.workspace = Path.of(workspace);
+        this.store = store;
     }
 
     @Override
-    public void stream(String input, TokenSink sink) {
+    public void stream(AgentRequest request, TokenSink sink) {
         if (props.apiKey() == null || props.apiKey().isBlank()) {
             // 明确告诉用户缺什么，而不是抛一个看不懂的 401
             sink.error("未配置模型密钥：请设置环境变量 DEEPSEEK_API_KEY（或 app.model.api-key）");
@@ -52,18 +56,19 @@ public class HarnessAgentRuntime implements AgentRuntime {
 
         HarnessAgent agent = null;
         try {
-            Files.createDirectories(workspace);
-            agent = HarnessAgent.builder()
-                    .name("workbench")
-                    .agentId("workbench")
-                    .workspace(workspace)
-                    .model(model())
-                    .build();
+            agent = buildAgent();
 
             CountDownLatch finished = new CountDownLatch(1);
             AtomicReference<Throwable> failure = new AtomicReference<>();
 
-            Flux<Object> events = agent.streamEvents(input).cast(Object.class);
+            // userId + sessionId 是 agent 状态的寻址键。缺了 sessionId，所有会话会共用
+            // 一份上下文（串味），这是之前真实存在的 bug。
+            RuntimeContext context = RuntimeContext.builder()
+                    .userId(request.userId())
+                    .sessionId(String.valueOf(request.conversationId()))
+                    .build();
+
+            Flux<Object> events = agent.streamEvents(request.input(), context).cast(Object.class);
             events.doOnNext(event -> {
                         if (event instanceof TextBlockDeltaEvent delta) {
                             sink.token(delta.getDelta());
@@ -86,10 +91,6 @@ public class HarnessAgentRuntime implements AgentRuntime {
             }
             sink.done();
         }
-        catch (java.io.IOException ioFailure) {
-            log.warn("agent 工作区不可写: {}", workspace, ioFailure);
-            sink.error("agent 工作区不可写：" + workspace + "（检查 app.agent.workspace 配置）");
-        }
         catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             sink.error("被中断");
@@ -109,6 +110,21 @@ public class HarnessAgentRuntime implements AgentRuntime {
                 }
             }
         }
+    }
+
+    private HarnessAgent buildAgent() {
+        HarnessAgent.Builder builder = HarnessAgent.builder()
+                .name("workbench")
+                .agentId("workbench")
+                .model(model());
+
+        if (store != null) {
+            builder.distributedStore(store)
+                    // SESSION 而不是 USER：每个会话独立工作区，
+                    // 否则同一用户的多个会话会共享 MEMORY.md 和文件，互相污染
+                    .filesystem(new RemoteFilesystemSpec().isolationScope(IsolationScope.SESSION));
+        }
+        return builder.build();
     }
 
     private Model model() {

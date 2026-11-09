@@ -18,7 +18,7 @@ public class StubAgentRuntime implements AgentRuntime {
             List.of("收到：", "这是", "桩 agent", "的回复。", "（接入真实模型见 #4）");
 
     @Override
-    public void stream(String input, TokenSink sink) {
+    public void stream(AgentRequest request, TokenSink sink) {
         try {
             for (String chunk : REPLY_CHUNKS) {
                 sink.token(chunk);
