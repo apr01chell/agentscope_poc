@@ -28,6 +28,8 @@ export interface SubmittedTurn {
   turnId: number
   /** 事件表自增 id，作为 SSE 的 cursor。 */
   cursor: number
+  /** 1 = 正在执行，2 = 排队中。 */
+  position: number
 }
 
 export async function listConversations(): Promise<ConversationSummary[]> {
@@ -46,6 +48,11 @@ export async function submitTurn(id: number, input: string): Promise<SubmittedTu
   return unwrap(
     (await http.post<ApiResult<SubmittedTurn>>(`/api/conversations/${id}/turns`, { input })).data,
   )
+}
+
+/** 取消一轮：排队中 → cancelled，执行中 → interrupted。 */
+export async function cancelTurn(id: number, turnId: number): Promise<void> {
+  await http.post(`/api/conversations/${id}/turns/${turnId}/cancel`)
 }
 
 /**

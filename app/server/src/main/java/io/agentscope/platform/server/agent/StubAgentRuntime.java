@@ -1,6 +1,8 @@
 package io.agentscope.platform.server.agent;
 
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -14,15 +16,35 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "app.model.provider", havingValue = "stub", matchIfMissing = true)
 public class StubAgentRuntime implements AgentRuntime {
 
+    private final Set<Long> cancelled = ConcurrentHashMap.newKeySet();
+    private final long chunkDelayMs;
+
+    public StubAgentRuntime(
+            @org.springframework.beans.factory.annotation.Value("${app.model.stub-chunk-delay-ms:20}")
+            long chunkDelayMs) {
+        this.chunkDelayMs = chunkDelayMs;
+    }
+
     static final List<String> REPLY_CHUNKS =
             List.of("收到：", "这是", "桩 agent", "的回复。", "（接入真实模型见 #4）");
+
+    @Override
+    public void cancel(long conversationId) {
+        cancelled.add(conversationId);
+    }
 
     @Override
     public void stream(AgentRequest request, TokenSink sink) {
         try {
             for (String chunk : REPLY_CHUNKS) {
+                if (cancelled.remove(request.conversationId())) {
+                    return; // 被中断：不再推事件，终止事件由上层发
+                }
                 sink.token(chunk);
-                Thread.sleep(20);
+                Thread.sleep(chunkDelayMs);
+            }
+            if (cancelled.contains(request.conversationId())) {
+                return;
             }
             sink.done();
         }

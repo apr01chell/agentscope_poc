@@ -2,6 +2,7 @@
 import type { ConversationSummary } from '@/api/workbench'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import {
+  cancelTurn,
   createConversation,
   eventsUrl,
   listConversations,
@@ -19,6 +20,10 @@ const bubbles = ref<Bubble[]>([])
 const input = ref('')
 const busy = ref(false)
 const error = ref('')
+/** 提示性信息（排队中之类），与 error 分开：它不是失败。 */
+const note = ref('')
+/** 当前正在执行/排队的轮次，取消时要用。 */
+const activeTurnId = ref<number | null>(null)
 
 let source: EventSource | null = null
 /** 当前正在接收 token 的助手气泡下标。 */
@@ -72,12 +77,18 @@ function listen(conversationId: number) {
   source = new EventSource(eventsUrl(conversationId))
 
   source.addEventListener('turn/queued', (event) => {
-    const payload = JSON.parse((event as MessageEvent).data) as { input?: string }
+    const payload = JSON.parse((event as MessageEvent).data) as {
+      input?: string
+      turnId?: number
+      position?: number
+    }
     // 用户气泡也由事件驱动：重放时才能还原历史提问
     bubbles.value.push({ role: 'user', text: payload.input ?? '' })
     bubbles.value.push({ role: 'assistant', text: '' })
     streamingIndex = bubbles.value.length - 1
     busy.value = true
+    activeTurnId.value = payload.turnId ?? null
+    note.value = payload.position === 2 ? '排队中：前面还有一个请求在跑' : ''
   })
 
   source.addEventListener('token', (event) => {
@@ -91,6 +102,26 @@ function listen(conversationId: number) {
   source.addEventListener('done', () => {
     streamingIndex = null
     busy.value = false
+    activeTurnId.value = null
+    note.value = ''
+  })
+
+  // 排队中被取消：还没开始生成
+  source.addEventListener('turn/cancelled', (event) => {
+    const payload = JSON.parse((event as MessageEvent).data) as { message?: string }
+    streamingIndex = null
+    busy.value = false
+    activeTurnId.value = null
+    note.value = payload.message ?? '已取消排队的请求'
+  })
+
+  // 执行中被中断：已经生成了一部分
+  source.addEventListener('turn/interrupted', (event) => {
+    const payload = JSON.parse((event as MessageEvent).data) as { message?: string }
+    streamingIndex = null
+    busy.value = false
+    activeTurnId.value = null
+    note.value = payload.message ?? '已中断正在生成的回答'
   })
 
   source.addEventListener('error', (event) => {
@@ -107,6 +138,8 @@ function listen(conversationId: number) {
     }
     streamingIndex = null
     busy.value = false
+    activeTurnId.value = null
+    note.value = ''
   })
 
   source.onerror = () => {
@@ -123,11 +156,14 @@ function listen(conversationId: number) {
 async function send() {
   const text = input.value.trim()
   const conversationId = activeId.value
-  if (!text || conversationId === null || busy.value) {
+  // 注意不要因为 busy 就拦截：同一会话允许"1 个执行中 + 1 个排队"，
+  // 第三个由服务端返回 429。前端拦下来会让排队能力形同虚设。
+  if (!text || conversationId === null) {
     return
   }
   busy.value = true
   error.value = ''
+  note.value = ''
   input.value = ''
 
   try {
@@ -137,6 +173,21 @@ async function send() {
   catch (e) {
     busy.value = false
     error.value = e instanceof Error ? e.message : '提交失败'
+  }
+}
+
+/** 取消当前轮次。排队中与执行中由服务端区分，这里只发一个请求。 */
+async function cancel() {
+  const conversationId = activeId.value
+  const turnId = activeTurnId.value
+  if (conversationId === null || turnId === null) {
+    return
+  }
+  try {
+    await cancelTurn(conversationId, turnId)
+  }
+  catch (e) {
+    error.value = e instanceof Error ? e.message : '取消失败'
   }
 }
 
@@ -170,6 +221,7 @@ onBeforeUnmount(closeStream)
 
     <section class="workbench__main">
       <el-alert v-if="error" :title="error" type="error" :closable="false" class="mb-3" />
+      <el-alert v-if="note" :title="note" type="info" :closable="false" class="mb-3" />
 
       <div class="workbench__bubbles" data-testid="bubbles">
         <p v-if="bubbles.length === 0" class="text-muted">
@@ -197,12 +249,20 @@ onBeforeUnmount(closeStream)
         />
         <el-button
           type="primary"
-          :loading="busy"
           :disabled="activeId === null"
           data-testid="send"
           @click="send"
         >
           发送
+        </el-button>
+        <el-button
+          v-if="busy"
+          type="danger"
+          plain
+          data-testid="cancel"
+          @click="cancel"
+        >
+          取消
         </el-button>
       </div>
     </section>

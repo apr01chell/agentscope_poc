@@ -65,10 +65,41 @@ public class ConversationController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResult.failure("会话不存在", "NOT_FOUND"));
         }
-        TurnService.SubmittedTurn submitted = turns.submit(id, request.input(), currentUser.sub());
-        return ResponseEntity.accepted().body(ApiResult.ok(Map.of(
-                "turnId", submitted.turnId(),
-                "cursor", submitted.cursor())));
+        try {
+            TurnService.SubmittedTurn submitted = turns.submit(id, request.input(), currentUser.sub());
+            return ResponseEntity.accepted().body(ApiResult.ok(Map.of(
+                    "turnId", submitted.turnId(),
+                    "cursor", submitted.cursor(),
+                    "position", submitted.position())));
+        }
+        catch (TooManyTurnsException busy) {
+            // 429 而不是 400：这是"稍后重试"而不是"请求写错了"
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(ApiResult.failure(busy.getMessage(), "TURN_QUEUE_FULL"));
+        }
+    }
+
+    /** 取消一轮：排队中 → turn/cancelled；执行中 → turn/interrupted。 */
+    @PostMapping("/{id}/turns/{turnId}/cancel")
+    public ResponseEntity<ApiResult<Map<String, Object>>> cancelTurn(
+            @PathVariable long id, @PathVariable long turnId) {
+        if (repository.find(id).filter(this::ownsConversation).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResult.failure("会话不存在", "NOT_FOUND"));
+        }
+        java.util.Optional<String> status = turns.cancel(id, turnId);
+        if (status.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResult.failure("轮次不存在", "NOT_FOUND"));
+        }
+        String stage = status.get();
+        if (!"QUEUED".equals(stage) && !"RUNNING".equals(stage)) {
+            // 已经结束的轮次不能取消：这不是错误，是状态冲突
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResult.failure("该请求已结束，无法取消", "NOT_CANCELLABLE"));
+        }
+        return ResponseEntity.ok(ApiResult.ok(Map.of(
+                "turnId", turnId, "status", "CANCELLED", "stage", stage)));
     }
 
     private boolean ownsConversation(Map<String, Object> row) {

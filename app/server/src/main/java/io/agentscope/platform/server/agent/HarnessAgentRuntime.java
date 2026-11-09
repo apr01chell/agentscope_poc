@@ -9,6 +9,9 @@ import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.filesystem.spec.RemoteFilesystemSpec;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -18,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
@@ -41,6 +45,10 @@ public class HarnessAgentRuntime implements AgentRuntime {
     private final AgentProperties props;
     private final DistributedStore store;
     private final Path workspace;
+
+    /** 正在进行的订阅，按会话 id 索引，供中断使用。 */
+    private final Map<Long, Disposable> running = new ConcurrentHashMap<>();
+    private final Set<Long> cancelled = ConcurrentHashMap.newKeySet();
 
     public HarnessAgentRuntime(
             AgentProperties props,
@@ -74,7 +82,11 @@ public class HarnessAgentRuntime implements AgentRuntime {
                     .build();
 
             Flux<Object> events = agent.streamEvents(request.input(), context).cast(Object.class);
-            events.doOnNext(event -> {
+            Disposable subscription = events
+                    .doOnNext(event -> {
+                        if (cancelled.contains(request.conversationId())) {
+                            return;
+                        }
                         if (event instanceof TextBlockDeltaEvent delta) {
                             sink.token(delta.getDelta());
                         }
@@ -84,9 +96,14 @@ public class HarnessAgentRuntime implements AgentRuntime {
                     // 放到弹性线程池：Flux 订阅本身是阻塞的，不能占用调用方的工作线程
                     .subscribeOn(Schedulers.boundedElastic())
                     .subscribe();
+            running.put(request.conversationId(), subscription);
 
             if (!finished.await(props.timeoutSeconds(), TimeUnit.SECONDS)) {
                 sink.error("模型响应超时（" + props.timeoutSeconds() + " 秒）");
+                return;
+            }
+            if (cancelled.remove(request.conversationId())) {
+                // 被中断：终止事件由上层发，这里保持沉默
                 return;
             }
             if (failure.get() != null) {
@@ -105,6 +122,7 @@ public class HarnessAgentRuntime implements AgentRuntime {
             sink.error(readable(error));
         }
         finally {
+            running.remove(request.conversationId());
             if (agent != null) {
                 // 框架建议每次请求构建后关闭，避免会话状态在实例间串味
                 try {
@@ -114,6 +132,15 @@ public class HarnessAgentRuntime implements AgentRuntime {
                     // 关闭失败不该盖住真正的错误
                 }
             }
+        }
+    }
+
+    @Override
+    public void cancel(long conversationId) {
+        cancelled.add(conversationId);
+        Disposable subscription = running.remove(conversationId);
+        if (subscription != null) {
+            subscription.dispose();
         }
     }
 

@@ -116,4 +116,46 @@ public class ConversationRepository {
                 })
                 .list();
     }
+
+    /** 会话内处于 QUEUED / RUNNING 的轮次数（用于 429 判定）。 */
+    public int countActive(long conversationId) {
+        return jdbc.sql("""
+                        SELECT COUNT(*) FROM turn
+                        WHERE conversation_id = :cid AND status IN ('QUEUED', 'RUNNING')
+                        """)
+                .param("cid", conversationId)
+                .query(Integer.class)
+                .single();
+    }
+
+    public java.util.Optional<java.util.Map<String, Object>> findTurn(long turnId) {
+        return jdbc.sql("SELECT id, conversation_id, seq, status FROM turn WHERE id = :id")
+                .param("id", turnId)
+                .query((rs, n) -> java.util.Map.<String, Object>of(
+                        "id", rs.getLong("id"),
+                        "conversationId", rs.getLong("conversation_id"),
+                        "seq", rs.getInt("seq"),
+                        "status", rs.getString("status")))
+                .optional();
+    }
+
+    public void markTurnStarted(long turnId) {
+        jdbc.sql("""
+                        UPDATE turn SET status = 'RUNNING', started_at = COALESCE(started_at, NOW())
+                        WHERE id = :id
+                        """)
+                .param("id", turnId)
+                .update();
+    }
+
+    public void markTurnEnded(long turnId, String status, String errorCode) {
+        jdbc.sql("""
+                        UPDATE turn SET status = :status, error_code = :code, ended_at = NOW()
+                        WHERE id = :id
+                        """)
+                .param("id", turnId)
+                .param("status", status)
+                .param("code", errorCode)
+                .update();
+    }
 }
