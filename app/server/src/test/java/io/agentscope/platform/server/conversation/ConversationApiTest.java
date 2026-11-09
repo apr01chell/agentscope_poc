@@ -11,7 +11,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import io.agentscope.platform.server.event.EventLog;
+import io.agentscope.platform.server.event.EventRecord;
+import io.agentscope.platform.server.event.EventStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -68,7 +68,7 @@ class ConversationApiTest {
     }
 
     @Autowired WebApplicationContext context;
-    @Autowired EventLog events;
+    @Autowired EventStore events;
 
     private MockMvc mvc;
 
@@ -110,6 +110,13 @@ class ConversationApiTest {
     }
 
     @Test
+    void anotherUserCannotReadMyEventStream() throws Exception {
+        long id = createConversation("42", "事件流归属");
+        mvc.perform(get("/api/conversations/" + id + "/events").with(authentication(asUser("43"))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void submitReturns202WithCursorAndStubAgentStreamsTokens() throws Exception {
         long id = createConversation("42", "流式");
 
@@ -123,8 +130,8 @@ class ConversationApiTest {
                 .andReturn().getResponse().getContentAsString();
 
         long turnId = ((Number) dataOf(body).get("turnId")).longValue();
-        String cursor = (String) dataOf(body).get("cursor");
-        assertNotNull(cursor, "应返回游标，前端靠它续读");
+        long cursor = ((Number) dataOf(body).get("cursor")).longValue();
+        assertTrue(cursor > 0, "应返回游标，前端靠它续读");
 
         // 桩 agent 在后台线程里发事件；等 done 出现
         List<String> types = waitForDone(id);
@@ -135,8 +142,19 @@ class ConversationApiTest {
         assertEquals(5, types.stream().filter("token"::equals).count(), "桩 agent 固定 5 个分片");
 
         // 从 cursor 之后读，应拿到 started 及后续（不含 queued）
-        List<MapRecord<String, Object, Object>> after = events.readAfter(id, cursor, 200);
-        assertEquals("turn/started", String.valueOf(after.get(0).getValue().get("type")));
+        List<EventRecord> after = events.readAfter(id, cursor, 200);
+        assertEquals("turn/started", after.get(0).type());
+
+        // 落库事实：事件按 id 升序、seq 从 1 连续递增，重放可复现
+        List<EventRecord> all = events.readAfter(id, 0, 200);
+        assertEquals(8, all.size(), "queued + started + 5×token + done");
+        for (int i = 0; i < all.size(); i++) {
+            assertEquals(i + 1, all.get(i).seq(), "事件序号应从 1 连续递增");
+            if (i > 0) {
+                assertTrue(all.get(i).id() > all.get(i - 1).id(), "id 必须严格递增，游标才可靠");
+            }
+        }
+        assertEquals("你好", all.get(0).payload().get("input"), "queued 事件要带 input，重放才能还原用户气泡");
 
         // 轮次落库状态
         mvc.perform(get("/api/conversations/" + id).with(authentication(asUser("42"))))
@@ -175,9 +193,8 @@ class ConversationApiTest {
     private List<String> waitForDone(long conversationId) throws InterruptedException {
         long deadline = System.currentTimeMillis() + 15_000;
         while (System.currentTimeMillis() < deadline) {
-            List<MapRecord<String, Object, Object>> all = events.readAfter(conversationId, null, 100);
-            List<String> types = all.stream()
-                    .map(r -> String.valueOf(r.getValue().get("type")))
+            List<String> types = events.readAfter(conversationId, 0, 100).stream()
+                    .map(EventRecord::type)
                     .toList();
             if (types.contains("done") || types.contains("error")) {
                 return types;

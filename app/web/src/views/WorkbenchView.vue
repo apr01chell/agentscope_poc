@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import type { ConversationSummary, TurnSummary } from '@/api/workbench'
+import type { ConversationSummary } from '@/api/workbench'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   createConversation,
   eventsUrl,
-  getConversation,
   listConversations,
   submitTurn,
 } from '@/api/workbench'
@@ -22,45 +21,34 @@ const busy = ref(false)
 const error = ref('')
 
 let source: EventSource | null = null
+/** 当前正在接收 token 的助手气泡下标。 */
+let streamingIndex: number | null = null
+/** 打开会话的请求序号：并发打开时只让最后一次生效。 */
+let openSeq = 0
 
 async function loadList() {
   try {
     conversations.value = await listConversations()
-    if (activeId.value === null && conversations.value.length > 0) {
-      await open(conversations.value[0].id)
-    }
   }
   catch (e) {
     error.value = e instanceof Error ? e.message : '加载会话失败'
   }
 }
 
-/** 打开会话的请求序号：并发打开时只让最后一次的结果生效，避免旧响应把新会话的气泡冲掉。 */
-let openSeq = 0
-
 async function open(id: number) {
   const seq = ++openSeq
   closeStream()
   activeId.value = id
   bubbles.value = []
-  try {
-    const detail = await getConversation(id)
-    if (seq !== openSeq) {
-      return
-    }
-    for (const turn of detail.turns as TurnSummary[]) {
-      bubbles.value.push({ role: 'user', text: turn.input })
-      if (turn.status === 'DONE') {
-        // 历史轮次的回复正文不在库里（事件流才是来源），#5 会补归档
-        bubbles.value.push({ role: 'assistant', text: '（历史回复：事件归档见 #5）' })
-      }
-    }
+  streamingIndex = null
+  error.value = ''
+  await loadList()
+  if (seq !== openSeq) {
+    return
   }
-  catch (e) {
-    if (seq === openSeq) {
-      error.value = e instanceof Error ? e.message : '打开会话失败'
-    }
-  }
+  // 不带 cursor：服务端从第一条事件重放整段历史，然后继续推增量。
+  // 这样"刷新页面看到完整历史"与"实时看到新事件"是同一套代码路径。
+  listen(id)
 }
 
 async function create() {
@@ -79,48 +67,54 @@ function closeStream() {
   source = null
 }
 
-/**
- * 打开事件流：cursor 之后的事件逐条喂给当前气泡。
- *
- * conversationId 必须由调用方传入，不能在这里读 activeId：
- * send() 里 submitTurn 是 await 的，期间用户（或自动打开逻辑）可能已经切了会话，
- * 那就会出现"提交到 A、订阅 B 的事件流"这种静默错位。
- */
-function listen(conversationId: number, cursor: string) {
+function listen(conversationId: number) {
   closeStream()
-  const assistant: Bubble = { role: 'assistant', text: '' }
-  bubbles.value.push(assistant)
+  source = new EventSource(eventsUrl(conversationId))
 
-  source = new EventSource(eventsUrl(conversationId, cursor))
+  source.addEventListener('turn/queued', (event) => {
+    const payload = JSON.parse((event as MessageEvent).data) as { input?: string }
+    // 用户气泡也由事件驱动：重放时才能还原历史提问
+    bubbles.value.push({ role: 'user', text: payload.input ?? '' })
+    bubbles.value.push({ role: 'assistant', text: '' })
+    streamingIndex = bubbles.value.length - 1
+    busy.value = true
+  })
 
-  const onToken = (event: MessageEvent) => {
-    const payload = JSON.parse(event.data) as { delta?: string }
-    assistant.text += payload.delta ?? ''
-  }
-  const onDone = () => {
+  source.addEventListener('token', (event) => {
+    const payload = JSON.parse((event as MessageEvent).data) as { delta?: string }
+    const bubble = streamingIndex === null ? null : bubbles.value[streamingIndex]
+    if (bubble) {
+      bubble.text += payload.delta ?? ''
+    }
+  })
+
+  source.addEventListener('done', () => {
+    streamingIndex = null
     busy.value = false
-    closeStream()
-  }
-  const onError = (event: MessageEvent) => {
+  })
+
+  source.addEventListener('error', (event) => {
+    const messageEvent = event as MessageEvent
+    if (!messageEvent.data) {
+      return
+    }
     try {
-      const payload = JSON.parse(event.data) as { message?: string }
+      const payload = JSON.parse(messageEvent.data) as { message?: string }
       error.value = payload.message ?? '生成失败'
     }
     catch {
       error.value = '生成失败'
     }
+    streamingIndex = null
     busy.value = false
-    closeStream()
-  }
+  })
 
-  source.addEventListener('token', onToken as EventListener)
-  source.addEventListener('done', onDone as EventListener)
-  source.addEventListener('error', onError as EventListener)
   source.onerror = () => {
-    // 服务端正常关闭也会触发 onerror；只有仍在忙碌时才当作失败
+    // 服务端正常收尾也会触发；只有仍在生成时才当作异常
     if (busy.value) {
       busy.value = false
-      error.value = '事件流中断，请刷新重试'
+      streamingIndex = null
+      error.value = '事件流中断，刷新可恢复'
       closeStream()
     }
   }
@@ -128,18 +122,17 @@ function listen(conversationId: number, cursor: string) {
 
 async function send() {
   const text = input.value.trim()
-  if (!text || activeId.value === null || busy.value) {
+  const conversationId = activeId.value
+  if (!text || conversationId === null || busy.value) {
     return
   }
-  const conversationId = activeId.value
   busy.value = true
   error.value = ''
-  bubbles.value.push({ role: 'user', text })
   input.value = ''
 
   try {
-    const submitted = await submitTurn(conversationId, text)
-    listen(conversationId, submitted.cursor)
+    await submitTurn(conversationId, text)
+    // 气泡由 SSE 的 turn/queued 事件渲染，这里不本地插入，避免与重放重复
   }
   catch (e) {
     busy.value = false
@@ -147,7 +140,12 @@ async function send() {
   }
 }
 
-onMounted(loadList)
+onMounted(async () => {
+  await loadList()
+  if (conversations.value.length > 0) {
+    await open(conversations.value[0].id)
+  }
+})
 onBeforeUnmount(closeStream)
 </script>
 

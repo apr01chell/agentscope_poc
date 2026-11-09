@@ -65,7 +65,7 @@ public class ConversationController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResult.failure("会话不存在", "NOT_FOUND"));
         }
-        TurnService.SubmittedTurn submitted = turns.submit(id, request.input());
+        TurnService.SubmittedTurn submitted = turns.submit(id, request.input(), currentUser.sub());
         return ResponseEntity.accepted().body(ApiResult.ok(Map.of(
                 "turnId", submitted.turnId(),
                 "cursor", submitted.cursor())));

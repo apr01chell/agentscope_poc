@@ -67,6 +67,11 @@
       <groupId>io.agentscope</groupId>
       <artifactId>agentscope-extensions-model-openai</artifactId>
     </dependency>
+    <!-- 分布式存储：状态/工作区 KV/快照/锁全部落 MySQL -->
+    <dependency>
+      <groupId>io.agentscope</groupId>
+      <artifactId>agentscope-extensions-jdbc</artifactId>
+    </dependency>
 
     <!-- Spring Framework 7 不再内嵌 commons-logging，见 auth 模块同名依赖的说明 -->
     <dependency>
