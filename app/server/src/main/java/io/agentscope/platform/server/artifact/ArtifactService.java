@@ -72,15 +72,30 @@ public class ArtifactService {
         return jdbc.sql("SELECT LAST_INSERT_ID()").query(Long.class).single();
     }
 
-    /** 只有归属者能拿到下载地址；别人的产物一律当作不存在。 */
-    public Optional<String> downloadUrl(long artifactId, String ownerSub, Duration ttl) {
-        return jdbc.sql("SELECT object_key FROM artifact WHERE id = :id AND owner_sub = :owner")
+    /**
+     * 打开产物内容流。
+     *
+     * <p>不用预签名地址：那是"临时授权链接"，适合分享给第三方；而这是**用户自己的文件**，
+     * 只要用户不删会话/文件就该一直能下。改成服务端中转后，每次下载都重新鉴权，
+     * 链接本身没有有效期，也就没有"5 分钟后打不开"的怪现象。
+     */
+    public Optional<ArtifactContent> open(long artifactId, String ownerSub) {
+        return jdbc.sql("""
+                        SELECT object_key, file_name, content_type, size_bytes
+                        FROM artifact WHERE id = :id AND owner_sub = :owner
+                        """)
                 .param("id", artifactId)
                 .param("owner", ownerSub)
-                .query(String.class)
-                .optional()
-                .map(key -> store.presignedGetUrl(key, ttl));
+                .query((rs, n) -> new ArtifactContent(
+                        store.get(rs.getString("object_key")),
+                        rs.getString("file_name"),
+                        rs.getString("content_type"),
+                        rs.getLong("size_bytes")))
+                .optional();
     }
+
+    public record ArtifactContent(
+            java.io.InputStream stream, String fileName, String contentType, long size) {}
 
     public Optional<Map<String, Object>> find(long artifactId, String ownerSub) {
         return jdbc.sql("""
