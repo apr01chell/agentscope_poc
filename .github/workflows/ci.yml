@@ -47,6 +47,25 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+  secrets:
+    name: 密钥泄露检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 扫描已跟踪文件里的疑似真实密钥
+        run: |
+          set -uo pipefail
+          # 只扫 git 跟踪的文件，跳过依赖与构建产物。
+          # 模式要求"真实密钥长度"（20+ 位），所以文档里的 sk-... / sk-xxx 不会误报；
+          # 仓库里有意提交的 dev RSA 私钥不会命中这两个模式。
+          if git ls-files -z \
+            | xargs -0 grep -nEI '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' > /tmp/leaks.txt 2>/dev/null; then
+            echo "::error::检测到疑似真实密钥，请改用环境变量或未跟踪的 .env："
+            cat /tmp/leaks.txt
+            exit 1
+          fi
+          echo "未发现疑似密钥"
+
   console:
     name: 控制台（类型 + 单测）
     runs-on: ubuntu-latest
