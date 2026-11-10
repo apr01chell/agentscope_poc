@@ -203,13 +203,17 @@ public class HarnessAgentRuntime implements AgentRuntime {
             // 会话日志仍走上面的 distributedStore。
             builder.filesystem(new DockerFilesystemSpec()
                     .image(sandboxImage)
-                    .workspaceRoot("/workspace"));
+                    .workspaceRoot("/workspace")
+                    // 必须显式指定且放在最后：默认是 USER（同一用户所有会话共用一个沙箱），
+                    // 那会让会话 A 写的文件出现在会话 B 里。
+                    // 注意 isolationScope 返回的是基类，放在链尾才不会丢掉 Docker 特有方法。
+                    .isolationScope(IsolationScope.SESSION));
         }
         else if (store != null) {
             // 不用沙箱时，工作区整体走远程存储；agents/ 是会话日志所在，必须显式路由
             builder.filesystem(new RemoteFilesystemSpec()
-                            .isolationScope(IsolationScope.SESSION)
-                            .addSharedPrefix("agents/"))
+                            .addSharedPrefix("agents/")
+                            .isolationScope(IsolationScope.SESSION))
                     .workspace(workspace);
         }
         return builder.build();
