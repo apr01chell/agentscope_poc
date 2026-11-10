@@ -82,6 +82,9 @@ public class HarnessAgentRuntime implements AgentRuntime {
         try {
             agent = buildAgent();
 
+            long startedAt = System.currentTimeMillis();
+            java.util.concurrent.atomic.AtomicLong firstTokenAt =
+                    new java.util.concurrent.atomic.AtomicLong(0);
             CountDownLatch finished = new CountDownLatch(1);
             AtomicReference<Throwable> failure = new AtomicReference<>();
 
@@ -99,6 +102,9 @@ public class HarnessAgentRuntime implements AgentRuntime {
                             return;
                         }
                         if (event instanceof TextBlockDeltaEvent delta) {
+                            // 首 token 延迟包含沙箱冷启动（框架每轮重建容器），
+                            // 这是判断"要不要为保活付架构代价"的关键数字
+                            firstTokenAt.compareAndSet(0, System.currentTimeMillis());
                             sink.token(delta.getDelta());
                         }
                     })
@@ -113,6 +119,13 @@ public class HarnessAgentRuntime implements AgentRuntime {
                 sink.error("模型响应超时（" + props.timeoutSeconds() + " 秒）");
                 return;
             }
+            long elapsed = System.currentTimeMillis() - startedAt;
+            long firstToken = firstTokenAt.get();
+            log.info("轮次耗时 conversation={} 首token={}ms 总计={}ms",
+                    request.conversationId(),
+                    firstToken == 0 ? -1 : firstToken - startedAt,
+                    elapsed);
+
             if (cancelled.remove(request.conversationId())) {
                 // 被中断：终止事件由上层发，这里保持沉默
                 return;
