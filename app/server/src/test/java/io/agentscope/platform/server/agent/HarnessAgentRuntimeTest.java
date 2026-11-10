@@ -17,7 +17,8 @@ class HarnessAgentRuntimeTest {
                 null,
                 "/tmp/agentscope-test",
                 false,
-                "ubuntu:24.04");
+                "ubuntu:24.04",
+                null);
 
         List<String> errors = new ArrayList<>();
         List<String> tokens = new ArrayList<>();

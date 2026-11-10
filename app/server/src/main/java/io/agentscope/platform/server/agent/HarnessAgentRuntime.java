@@ -52,6 +52,7 @@ public class HarnessAgentRuntime implements AgentRuntime {
     private final Path workspace;
     private final boolean sandboxEnabled;
     private final String sandboxImage;
+    private final io.agentscope.harness.agent.artifact.ArtifactDeliveryTarget artifactDeliveryTarget;
 
     /** 正在进行的订阅，按会话 id 索引，供中断使用。 */
     private final Map<Long, Disposable> running = new ConcurrentHashMap<>();
@@ -62,12 +63,14 @@ public class HarnessAgentRuntime implements AgentRuntime {
             @Autowired(required = false) DistributedStore store,
             @Value("${app.agent.workspace:/tmp/agentscope}") String workspace,
             @Value("${app.sandbox.enabled:false}") boolean sandboxEnabled,
-            @Value("${app.sandbox.image:ubuntu:24.04}") String sandboxImage) {
+            @Value("${app.sandbox.image:ubuntu:24.04}") String sandboxImage,
+            io.agentscope.harness.agent.artifact.ArtifactDeliveryTarget artifactDeliveryTarget) {
         this.props = props;
         this.store = store;
         this.workspace = Path.of(workspace);
         this.sandboxEnabled = sandboxEnabled;
         this.sandboxImage = sandboxImage;
+        this.artifactDeliveryTarget = artifactDeliveryTarget;
     }
 
     @Override
@@ -172,7 +175,9 @@ public class HarnessAgentRuntime implements AgentRuntime {
         HarnessAgent.Builder builder = HarnessAgent.builder()
                 .name("workbench")
                 .agentId("workbench")
-                .model(model());
+                .model(model())
+                // 产物交付：落到 RustFS + artifact 表（#9）
+                .artifactDeliveryTarget(artifactDeliveryTarget);
 
         // 会话状态与会话日志始终落 MySQL：沙箱是可丢弃的，不能让它承载记忆
         if (store != null) {

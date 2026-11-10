@@ -67,6 +67,12 @@
       <groupId>io.agentscope</groupId>
       <artifactId>agentscope-extensions-model-openai</artifactId>
     </dependency>
+    <!-- 对象存储：产物落 RustFS（S3 兼容） -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+    </dependency>
+
     <!-- 分布式存储：状态/工作区 KV/快照/锁全部落 MySQL -->
     <dependency>
       <groupId>io.agentscope</groupId>
