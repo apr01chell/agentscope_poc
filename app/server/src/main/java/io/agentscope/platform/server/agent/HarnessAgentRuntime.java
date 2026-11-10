@@ -52,6 +52,7 @@ public class HarnessAgentRuntime implements AgentRuntime {
     private final Path workspace;
     private final boolean sandboxEnabled;
     private final String sandboxImage;
+    private final io.agentscope.harness.agent.artifact.ArtifactDeliveryTarget artifactDeliveryTarget;
 
     /** 正在进行的订阅，按会话 id 索引，供中断使用。 */
     private final Map<Long, Disposable> running = new ConcurrentHashMap<>();
@@ -62,12 +63,14 @@ public class HarnessAgentRuntime implements AgentRuntime {
             @Autowired(required = false) DistributedStore store,
             @Value("${app.agent.workspace:/tmp/agentscope}") String workspace,
             @Value("${app.sandbox.enabled:false}") boolean sandboxEnabled,
-            @Value("${app.sandbox.image:ubuntu:24.04}") String sandboxImage) {
+            @Value("${app.sandbox.image:ubuntu:24.04}") String sandboxImage,
+            io.agentscope.harness.agent.artifact.ArtifactDeliveryTarget artifactDeliveryTarget) {
         this.props = props;
         this.store = store;
         this.workspace = Path.of(workspace);
         this.sandboxEnabled = sandboxEnabled;
         this.sandboxImage = sandboxImage;
+        this.artifactDeliveryTarget = artifactDeliveryTarget;
     }
 
     @Override
@@ -172,7 +175,9 @@ public class HarnessAgentRuntime implements AgentRuntime {
         HarnessAgent.Builder builder = HarnessAgent.builder()
                 .name("workbench")
                 .agentId("workbench")
-                .model(model());
+                .model(model())
+                // 产物交付：落到 RustFS + artifact 表（#9）
+                .artifactDeliveryTarget(artifactDeliveryTarget);
 
         // 会话状态与会话日志始终落 MySQL：沙箱是可丢弃的，不能让它承载记忆
         if (store != null) {
@@ -198,13 +203,17 @@ public class HarnessAgentRuntime implements AgentRuntime {
             // 会话日志仍走上面的 distributedStore。
             builder.filesystem(new DockerFilesystemSpec()
                     .image(sandboxImage)
-                    .workspaceRoot("/workspace"));
+                    .workspaceRoot("/workspace")
+                    // 必须显式指定且放在最后：默认是 USER（同一用户所有会话共用一个沙箱），
+                    // 那会让会话 A 写的文件出现在会话 B 里。
+                    // 注意 isolationScope 返回的是基类，放在链尾才不会丢掉 Docker 特有方法。
+                    .isolationScope(IsolationScope.SESSION));
         }
         else if (store != null) {
             // 不用沙箱时，工作区整体走远程存储；agents/ 是会话日志所在，必须显式路由
             builder.filesystem(new RemoteFilesystemSpec()
-                            .isolationScope(IsolationScope.SESSION)
-                            .addSharedPrefix("agents/"))
+                            .addSharedPrefix("agents/")
+                            .isolationScope(IsolationScope.SESSION))
                     .workspace(workspace);
         }
         return builder.build();
