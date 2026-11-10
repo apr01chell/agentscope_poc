@@ -29,6 +29,8 @@ app:
     workspace-root: ${SANDBOX_WORKSPACE_ROOT:/workspace}
     network: ${SANDBOX_NETWORK:none}
     exec-timeout-seconds: ${SANDBOX_EXEC_TIMEOUT:60}
+    # 快照保留：沙箱每轮都落快照，不清理会无限增长
+    snapshot-retention-hours: ${SANDBOX_SNAPSHOT_RETENTION_HOURS:24}
   agent:
     # 本地暂存目录（仅作临时工作区）。会话状态与会话日志走 MySQL（见 DistributedStore）。
     workspace: ${AGENT_WORKSPACE:/tmp/agentscope}
